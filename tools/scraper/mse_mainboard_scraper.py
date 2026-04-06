@@ -3,11 +3,22 @@ import re
 import argparse
 from datetime import datetime, timezone
 
+# Force urllib3 (used by requests) to use IPv4 to avoid "Network is unreachable" on some runners.
+import socket
+try:
+    import urllib3.util.connection as urllib3_cn
+    urllib3_cn.allowed_gai_family = lambda: socket.AF_INET
+except Exception:
+    pass
+
 import requests
 from bs4 import BeautifulSoup
 from supabase import create_client
 
-URL_DEFAULT = "https://mse.co.mw/market/mainboard"
+URL_DEFAULTS = [
+    "https://www.mse.co.mw/market/mainboard",
+    "https://mse.co.mw/market/mainboard",
+]
 
 def norm(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip().lower())
@@ -32,23 +43,34 @@ def find_col(headers, wanted):
                 return i
     return None
 
+def fetch_html(urls):
+    last_err = None
+    for url in urls:
+        try:
+            r = requests.get(url, timeout=60, headers={"User-Agent": "Mozilla/5.0"})
+            r.raise_for_status()
+            return url, r.text
+        except Exception as e:
+            last_err = e
+    raise SystemExit(f"Failed to fetch MSE page from all URLs. Last error: {last_err}")
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--url", default=URL_DEFAULT)
+    ap.add_argument("--url", default=os.environ.get("MSE_MAINBOARD_URL", ""), help="Override mainboard URL")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
-    r = requests.get(args.url, timeout=45, headers={"User-Agent": "Mozilla/5.0"})
-    r.raise_for_status()
+    urls = [args.url] if args.url else URL_DEFAULTS
+    used_url, html = fetch_html(urls)
 
-    soup = BeautifulSoup(r.text, "html.parser")
+    soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table")
     if not table:
-        raise SystemExit("No <table> found on the page.")
+        raise SystemExit(f"No <table> found on the page: {used_url}")
 
     headers = [th.get_text(" ", strip=True) for th in table.find_all("th")]
     if not headers:
-        raise SystemExit("Table found but no headers (<th>) found.")
+        raise SystemExit(f"Table found but no headers (<th>) found: {used_url}")
 
     symbol_i = find_col(headers, ["symbol"])
     open_i   = find_col(headers, ["open price", "open"])
@@ -87,7 +109,7 @@ def main():
         parsed.append({
             "symbol": symbol,
             "open_price": round(open_price, 2) if open_price is not None else None,
-            "price": round(close_price, 2),  # 'price' == close price in our DB
+            "price": round(close_price, 2),  # 'price' == close price
             "change_percent": round(change_percent, 2) if change_percent is not None else 0.0,
             "volume": int(volume) if volume is not None else 0,
             "turnover_mwk": round(turnover, 2) if turnover is not None else None,
@@ -96,16 +118,12 @@ def main():
     if args.dry_run:
         for row in parsed:
             print(row)
-        print(f"\nParsed rows: {len(parsed)}")
+        print(f"\nParsed rows: {len(parsed)} from {used_url}")
         return
 
-    supabase_url = os.environ["SUPABASE_URL"]
-    service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-    sb = create_client(supabase_url, service_key)
-
+    sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    # Upsert by symbol (updates prices daily)
     upserts = []
     for row in parsed:
         upserts.append({
