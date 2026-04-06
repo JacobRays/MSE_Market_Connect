@@ -3,7 +3,7 @@ import re
 import argparse
 from datetime import datetime, timezone
 
-# Force urllib3 (used by requests) to use IPv4 to avoid "Network is unreachable" on some runners.
+# Force IPv4 on some runners to avoid "Network is unreachable"
 import socket
 try:
     import urllib3.util.connection as urllib3_cn
@@ -20,6 +20,26 @@ URL_DEFAULTS = [
     "https://mse.co.mw/market/mainboard",
 ]
 
+# Known MSE companies (ensures company_name is never null)
+KNOWN_NAMES = {
+    "AIRTEL": "Airtel Malawi Plc",
+    "BHL": "Blantyre Hotels Plc",
+    "FDHB": "FDH Bank Plc",
+    "FMBCH": "FMBcapital Holdings Plc",
+    "ICON": "ICON Properties Plc",
+    "ILLOVO": "Illovo Sugar (Malawi) Plc",
+    "MPICO": "Malawi Property Investment Company Plc",
+    "NBM": "National Bank of Malawi Plc",
+    "NBS": "NBS Bank Plc",
+    "NICO": "NICO Holdings Plc",
+    "NITL": "National Investment Trust Plc",
+    "OMU": "Old Mutual Limited",
+    "PCL": "Press Corporation Plc",
+    "STANDARD": "Standard Bank Malawi Plc",
+    "SUNBIRD": "Sunbird Tourism Plc",
+    "TNM": "Telekom Networks Malawi Plc",
+}
+
 def norm(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip().lower())
 
@@ -27,7 +47,7 @@ def num(s: str):
     if s is None:
         return None
     s = s.strip().replace(",", "")
-    s = re.sub(r"[^\d\.\-\+]", "", s)  # remove MK, %, etc.
+    s = re.sub(r"[^\d\.\-\+]", "", s)
     if s in ("", "+", "-"):
         return None
     try:
@@ -56,7 +76,7 @@ def fetch_html(urls):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--url", default=os.environ.get("MSE_MAINBOARD_URL", ""), help="Override mainboard URL")
+    ap.add_argument("--url", default=os.environ.get("MSE_MAINBOARD_URL", ""))
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -109,7 +129,7 @@ def main():
         parsed.append({
             "symbol": symbol,
             "open_price": round(open_price, 2) if open_price is not None else None,
-            "price": round(close_price, 2),  # 'price' == close price
+            "price": round(close_price, 2),
             "change_percent": round(change_percent, 2) if change_percent is not None else 0.0,
             "volume": int(volume) if volume is not None else 0,
             "turnover_mwk": round(turnover, 2) if turnover is not None else None,
@@ -122,12 +142,29 @@ def main():
         return
 
     sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+
+    # Fetch existing names so we don't overwrite them with defaults
+    existing = sb.table("stocks").select("symbol,company_name").execute().data or []
+    existing_name_by_symbol = {
+        r["symbol"]: r.get("company_name")
+        for r in existing
+        if r.get("symbol") and r.get("company_name")
+    }
+
     now_iso = datetime.now(timezone.utc).isoformat()
 
     upserts = []
     for row in parsed:
+        sym = row["symbol"]
+        company_name = (
+            existing_name_by_symbol.get(sym)
+            or KNOWN_NAMES.get(sym)
+            or sym  # last-resort fallback
+        )
+
         upserts.append({
-            "symbol": row["symbol"],
+            "symbol": sym,
+            "company_name": company_name,   # FIX: never null
             "open_price": row["open_price"],
             "price": row["price"],
             "change_percent": row["change_percent"],
