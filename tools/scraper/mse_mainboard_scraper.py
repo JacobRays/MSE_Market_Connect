@@ -1,9 +1,6 @@
-import os
-import re
-import argparse
+import os, re, argparse
 from datetime import datetime, timezone
 
-# Force IPv4 on some runners to avoid "Network is unreachable"
 import socket
 try:
     import urllib3.util.connection as urllib3_cn
@@ -15,83 +12,49 @@ import requests
 from bs4 import BeautifulSoup
 from supabase import create_client
 
-URL_DEFAULTS = [
-    "https://www.mse.co.mw/market/mainboard",
-    "https://mse.co.mw/market/mainboard",
-]
-
-# Known MSE companies (ensures company_name is never null)
-KNOWN_NAMES = {
-    "AIRTEL": "Airtel Malawi Plc",
-    "BHL": "Blantyre Hotels Plc",
-    "FDHB": "FDH Bank Plc",
-    "FMBCH": "FMBcapital Holdings Plc",
-    "ICON": "ICON Properties Plc",
-    "ILLOVO": "Illovo Sugar (Malawi) Plc",
-    "MPICO": "Malawi Property Investment Company Plc",
-    "NBM": "National Bank of Malawi Plc",
-    "NBS": "NBS Bank Plc",
-    "NICO": "NICO Holdings Plc",
-    "NITL": "National Investment Trust Plc",
-    "OMU": "Old Mutual Limited",
-    "PCL": "Press Corporation Plc",
-    "STANDARD": "Standard Bank Malawi Plc",
-    "SUNBIRD": "Sunbird Tourism Plc",
-    "TNM": "Telekom Networks Malawi Plc",
-}
+URLS = ["https://www.mse.co.mw/market/mainboard", "https://mse.co.mw/market/mainboard"]
 
 def norm(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip().lower())
 
 def num(s: str):
-    if s is None:
-        return None
-    s = s.strip().replace(",", "")
-    s = re.sub(r"[^\d\.\-\+]", "", s)
-    if s in ("", "+", "-"):
-        return None
-    try:
-        return float(s)
-    except:
-        return None
+    if s is None: return None
+    s = re.sub(r"[^\d\.\-\+]", "", s.strip().replace(",", ""))
+    if s in ("", "+", "-"): return None
+    try: return float(s)
+    except: return None
 
 def find_col(headers, wanted):
-    headers_n = [norm(h) for h in headers]
-    for i, h in enumerate(headers_n):
+    hn = [norm(h) for h in headers]
+    for i, h in enumerate(hn):
         for w in wanted:
             if w in h:
                 return i
     return None
 
-def fetch_html(urls):
-    last_err = None
-    for url in urls:
+def fetch_html():
+    last = None
+    for url in URLS:
         try:
             r = requests.get(url, timeout=60, headers={"User-Agent": "Mozilla/5.0"})
             r.raise_for_status()
-            return url, r.text
+            return r.text
         except Exception as e:
-            last_err = e
-    raise SystemExit(f"Failed to fetch MSE page from all URLs. Last error: {last_err}")
+            last = e
+    raise SystemExit(f"Failed to fetch mainboard page. Last error: {last}")
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--url", default=os.environ.get("MSE_MAINBOARD_URL", ""))
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
-    urls = [args.url] if args.url else URL_DEFAULTS
-    used_url, html = fetch_html(urls)
-
+    html = fetch_html()
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table")
     if not table:
-        raise SystemExit(f"No <table> found on the page: {used_url}")
+        raise SystemExit("No <table> found on the page.")
 
     headers = [th.get_text(" ", strip=True) for th in table.find_all("th")]
-    if not headers:
-        raise SystemExit(f"Table found but no headers (<th>) found: {used_url}")
-
     symbol_i = find_col(headers, ["symbol"])
     open_i   = find_col(headers, ["open price", "open"])
     close_i  = find_col(headers, ["close price", "close"])
@@ -109,73 +72,56 @@ def main():
         if not tds:
             continue
         cols = [td.get_text(" ", strip=True) for td in tds]
-
         if symbol_i >= len(cols) or close_i >= len(cols):
             continue
 
         symbol = re.sub(r"[^A-Za-z0-9_-]", "", cols[symbol_i]).upper().strip()
-        if not symbol:
-            continue
-
-        open_price = num(cols[open_i]) if open_i is not None and open_i < len(cols) else None
         close_price = num(cols[close_i])
-        change_percent = num(cols[chg_i]) if chg_i is not None and chg_i < len(cols) else None
-        volume = num(cols[vol_i]) if vol_i is not None and vol_i < len(cols) else None
-        turnover = num(cols[turn_i]) if turn_i is not None and turn_i < len(cols) else None
-
-        if close_price is None:
+        if not symbol or close_price is None:
             continue
 
         parsed.append({
             "symbol": symbol,
-            "open_price": round(open_price, 2) if open_price is not None else None,
+            "open_price": round(num(cols[open_i]), 2) if open_i is not None and open_i < len(cols) and num(cols[open_i]) is not None else None,
             "price": round(close_price, 2),
-            "change_percent": round(change_percent, 2) if change_percent is not None else 0.0,
-            "volume": int(volume) if volume is not None else 0,
-            "turnover_mwk": round(turnover, 2) if turnover is not None else None,
+            "change_percent": round(num(cols[chg_i]), 2) if chg_i is not None and chg_i < len(cols) and num(cols[chg_i]) is not None else 0.0,
+            "volume": int(num(cols[vol_i])) if vol_i is not None and vol_i < len(cols) and num(cols[vol_i]) is not None else 0,
+            "turnover_mwk": round(num(cols[turn_i]), 2) if turn_i is not None and turn_i < len(cols) and num(cols[turn_i]) is not None else None,
         })
 
     if args.dry_run:
-        for row in parsed:
-            print(row)
-        print(f"\nParsed rows: {len(parsed)} from {used_url}")
+        print(f"Parsed rows: {len(parsed)}")
+        for r in parsed:
+            print(r)
         return
 
     sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
 
-    # Fetch existing names so we don't overwrite them with defaults
-    existing = sb.table("stocks").select("symbol,company_name").execute().data or []
-    existing_name_by_symbol = {
-        r["symbol"]: r.get("company_name")
-        for r in existing
-        if r.get("symbol") and r.get("company_name")
-    }
+    existing = sb.table("stocks").select("symbol").execute().data or []
+    existing_symbols = {r["symbol"] for r in existing if r.get("symbol")}
 
     now_iso = datetime.now(timezone.utc).isoformat()
-
     upserts = []
-    for row in parsed:
-        sym = row["symbol"]
-        company_name = (
-            existing_name_by_symbol.get(sym)
-            or KNOWN_NAMES.get(sym)
-            or sym  # last-resort fallback
-        )
+    skipped = 0
 
+    for row in parsed:
+        if row["symbol"] not in existing_symbols:
+            skipped += 1
+            continue
         upserts.append({
-            "symbol": sym,
-            "company_name": company_name,   # FIX: never null
+            "symbol": row["symbol"],
             "open_price": row["open_price"],
             "price": row["price"],
             "change_percent": row["change_percent"],
             "volume": row["volume"],
             "turnover_mwk": row["turnover_mwk"],
             "updated_at": now_iso,
-            "is_active": True,
         })
 
-    sb.table("stocks").upsert(upserts, on_conflict="symbol").execute()
-    print(f"Upserted {len(upserts)} rows into stocks.")
+    if upserts:
+        sb.table("stocks").upsert(upserts, on_conflict="symbol").execute()
+
+    print(f"Updated: {len(upserts)} symbols. Skipped (not seeded): {skipped}.")
 
 if __name__ == "__main__":
     main()
