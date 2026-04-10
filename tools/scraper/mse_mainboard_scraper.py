@@ -1,7 +1,7 @@
 import os, re, argparse
 from datetime import datetime, timezone
 
-# Force IPv4 (helps on GitHub runners that fail IPv6 routes)
+# Force IPv4 on some GitHub runners (avoids "network is unreachable" from IPv6 routing)
 import socket
 try:
     import urllib3.util.connection as urllib3_cn
@@ -18,15 +18,38 @@ URLS = [
     "https://mse.co.mw/market/mainboard",
 ]
 
+KNOWN_NAMES = {
+    "AIRTEL": "Airtel Malawi Plc",
+    "BHL": "Blantyre Hotels Plc",
+    "FDHB": "FDH Bank Plc",
+    "FMBCH": "FMBcapital Holdings Plc",
+    "ICON": "ICON Properties Plc",
+    "ILLOVO": "Illovo Sugar (Malawi) Plc",
+    "MPICO": "Malawi Property Investment Company Plc",
+    "NBM": "National Bank of Malawi Plc",
+    "NBS": "NBS Bank Plc",
+    "NICO": "NICO Holdings Plc",
+    "NITL": "National Investment Trust Plc",
+    "OMU": "Old Mutual Limited",
+    "PCL": "Press Corporation Plc",
+    "STANDARD": "Standard Bank Malawi Plc",
+    "SUNBIRD": "Sunbird Tourism Plc",
+    "TNM": "Telekom Networks Malawi Plc",
+}
+
 def norm(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip().lower())
 
 def num(s: str):
-    if s is None: return None
+    if s is None:
+        return None
     s = re.sub(r"[^\d\.\-\+]", "", s.strip().replace(",", ""))
-    if s in ("", "+", "-"): return None
-    try: return float(s)
-    except: return None
+    if s in ("", "+", "-"):
+        return None
+    try:
+        return float(s)
+    except:
+        return None
 
 def find_col(headers, wanted):
     hn = [norm(h) for h in headers]
@@ -53,12 +76,14 @@ def main():
     args = ap.parse_args()
 
     used_url, html = fetch_html()
+
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table")
     if not table:
         raise SystemExit(f"No <table> found on the page: {used_url}")
 
     headers = [th.get_text(" ", strip=True) for th in table.find_all("th")]
+
     symbol_i = find_col(headers, ["symbol"])
     open_i   = find_col(headers, ["open price", "open"])
     close_i  = find_col(headers, ["close price", "close"])
@@ -76,6 +101,7 @@ def main():
         if not tds:
             continue
         cols = [td.get_text(" ", strip=True) for td in tds]
+
         if symbol_i >= len(cols) or close_i >= len(cols):
             continue
 
@@ -84,13 +110,18 @@ def main():
         if not symbol or close_price is None:
             continue
 
+        open_price = num(cols[open_i]) if open_i is not None and open_i < len(cols) else None
+        change_pct = num(cols[chg_i]) if chg_i is not None and chg_i < len(cols) else None
+        volume     = num(cols[vol_i]) if vol_i is not None and vol_i < len(cols) else None
+        turnover   = num(cols[turn_i]) if turn_i is not None and turn_i < len(cols) else None
+
         parsed.append({
             "symbol": symbol,
-            "open_price": round(num(cols[open_i]), 2) if open_i is not None and open_i < len(cols) and num(cols[open_i]) is not None else None,
+            "open_price": round(open_price, 2) if open_price is not None else None,
             "price": round(close_price, 2),
-            "change_percent": round(num(cols[chg_i]), 2) if chg_i is not None and chg_i < len(cols) and num(cols[chg_i]) is not None else 0.0,
-            "volume": int(num(cols[vol_i])) if vol_i is not None and vol_i < len(cols) and num(cols[vol_i]) is not None else 0,
-            "turnover_mwk": round(num(cols[turn_i]), 2) if turn_i is not None and turn_i < len(cols) and num(cols[turn_i]) is not None else None,
+            "change_percent": round(change_pct, 2) if change_pct is not None else 0.0,
+            "volume": int(volume) if volume is not None else 0,
+            "turnover_mwk": round(turnover, 2) if turnover is not None else None,
         })
 
     if args.dry_run:
@@ -101,33 +132,33 @@ def main():
 
     sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
 
-    existing = sb.table("stocks").select("symbol").execute().data or []
-    existing_symbols = {r["symbol"] for r in existing if r.get("symbol")}
-    print(f"Seeded symbols in DB: {len(existing_symbols)}")
+    existing = sb.table("stocks").select("symbol,company_name").execute().data or []
+    name_by_symbol = {r["symbol"]: (r.get("company_name") or "").strip() for r in existing if r.get("symbol")}
+    print(f"Seeded symbols in DB: {len(name_by_symbol)}")
 
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    # IMPORTANT: only update symbols that already exist; never insert new ones.
-    updates = []
-    skipped = 0
+    upserts = []
     for row in parsed:
-        if row["symbol"] not in existing_symbols:
-            skipped += 1
-            continue
-        updates.append({
-            "symbol": row["symbol"],
+        sym = row["symbol"]
+
+        # MUST be non-null to satisfy NOT NULL, even during upsert.
+        company_name = name_by_symbol.get(sym) or KNOWN_NAMES.get(sym) or sym
+
+        upserts.append({
+            "symbol": sym,
+            "company_name": company_name,
             "open_price": row["open_price"],
             "price": row["price"],
             "change_percent": row["change_percent"],
             "volume": row["volume"],
             "turnover_mwk": row["turnover_mwk"],
             "updated_at": now_iso,
+            "is_active": True,
         })
 
-    if updates:
-        sb.table("stocks").upsert(updates, on_conflict="symbol").execute()
-
-    print(f"Updated: {len(updates)} symbols. Skipped (not seeded): {skipped}.")
+    sb.table("stocks").upsert(upserts, on_conflict="symbol").execute()
+    print(f"Upserted {len(upserts)} rows into stocks.")
 
 if __name__ == "__main__":
     main()
