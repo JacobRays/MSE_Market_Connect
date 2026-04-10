@@ -1,6 +1,7 @@
 import os, re, argparse
 from datetime import datetime, timezone
 
+# Force IPv4 (helps on GitHub runners that fail IPv6 routes)
 import socket
 try:
     import urllib3.util.connection as urllib3_cn
@@ -12,7 +13,10 @@ import requests
 from bs4 import BeautifulSoup
 from supabase import create_client
 
-URLS = ["https://www.mse.co.mw/market/mainboard", "https://mse.co.mw/market/mainboard"]
+URLS = [
+    "https://www.mse.co.mw/market/mainboard",
+    "https://mse.co.mw/market/mainboard",
+]
 
 def norm(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip().lower())
@@ -38,7 +42,7 @@ def fetch_html():
         try:
             r = requests.get(url, timeout=60, headers={"User-Agent": "Mozilla/5.0"})
             r.raise_for_status()
-            return r.text
+            return url, r.text
         except Exception as e:
             last = e
     raise SystemExit(f"Failed to fetch mainboard page. Last error: {last}")
@@ -48,11 +52,11 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
-    html = fetch_html()
+    used_url, html = fetch_html()
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table")
     if not table:
-        raise SystemExit("No <table> found on the page.")
+        raise SystemExit(f"No <table> found on the page: {used_url}")
 
     headers = [th.get_text(" ", strip=True) for th in table.find_all("th")]
     symbol_i = find_col(headers, ["symbol"])
@@ -90,7 +94,7 @@ def main():
         })
 
     if args.dry_run:
-        print(f"Parsed rows: {len(parsed)}")
+        print(f"Parsed rows: {len(parsed)} from {used_url}")
         for r in parsed:
             print(r)
         return
@@ -99,16 +103,18 @@ def main():
 
     existing = sb.table("stocks").select("symbol").execute().data or []
     existing_symbols = {r["symbol"] for r in existing if r.get("symbol")}
+    print(f"Seeded symbols in DB: {len(existing_symbols)}")
 
     now_iso = datetime.now(timezone.utc).isoformat()
-    upserts = []
-    skipped = 0
 
+    # IMPORTANT: only update symbols that already exist; never insert new ones.
+    updates = []
+    skipped = 0
     for row in parsed:
         if row["symbol"] not in existing_symbols:
             skipped += 1
             continue
-        upserts.append({
+        updates.append({
             "symbol": row["symbol"],
             "open_price": row["open_price"],
             "price": row["price"],
@@ -118,10 +124,10 @@ def main():
             "updated_at": now_iso,
         })
 
-    if upserts:
-        sb.table("stocks").upsert(upserts, on_conflict="symbol").execute()
+    if updates:
+        sb.table("stocks").upsert(updates, on_conflict="symbol").execute()
 
-    print(f"Updated: {len(upserts)} symbols. Skipped (not seeded): {skipped}.")
+    print(f"Updated: {len(updates)} symbols. Skipped (not seeded): {skipped}.")
 
 if __name__ == "__main__":
     main()
