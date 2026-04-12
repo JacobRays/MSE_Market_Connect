@@ -21,8 +21,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r tools/scraper/requirements.txt
 
-      - name: Run scraper
+      - name: Update prices from MSE mainboard
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python tools/scraper/mse_mainboard_scraper.py
+
+      - name: Trigger price alerts (auto-disable) + create notifications
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python tools/scraper/process_price_alerts.py
