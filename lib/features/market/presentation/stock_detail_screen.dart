@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mse_market_connect/core/theme/app_theme.dart';
+import 'package:mse_market_connect/features/market/presentation/set_price_alert_screen.dart';
 import 'package:mse_market_connect/features/trade/presentation/buy_order_screen.dart';
 import 'package:mse_market_connect/shared/models/stock_model.dart';
 
@@ -35,40 +36,30 @@ class StockDetailScreen extends StatelessWidget {
                         style: Theme.of(context).textTheme.headlineMedium,
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        stock.companyName,
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
+                      Text(stock.companyName),
                       const SizedBox(height: 20),
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          _MetricItem(
-                            label: 'Price',
-                            value: 'MWK ${stock.price.toStringAsFixed(2)}',
+                          Expanded(
+                            child: _MetricItem(
+                              label: 'Price',
+                              value: 'MWK ${stock.price.toStringAsFixed(2)}',
+                            ),
                           ),
-                          _MetricItem(
-                            label: 'Change',
-                            value:
-                                '${isPositive ? '+' : ''}${stock.changePercent.toStringAsFixed(2)}%',
-                            valueColor: isPositive
-                                ? AppTheme.gainColor
-                                : AppTheme.lossColor,
+                          Expanded(
+                            child: _MetricItem(
+                              label: 'Change',
+                              value:
+                                  '${isPositive ? '+' : ''}${stock.changePercent.toStringAsFixed(2)}%',
+                              valueColor: isPositive
+                                  ? AppTheme.gainColor
+                                  : AppTheme.lossColor,
+                            ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 20),
-                      _MetricItem(
-                        label: 'Volume',
-                        value: stock.volume.toString(),
-                      ),
-                      if (stock.updatedAt != null) ...[
-                        const SizedBox(height: 20),
-                        _MetricItem(
-                          label: 'Last Updated',
-                          value: _formatDate(stock.updatedAt!),
-                        ),
-                      ],
+                      const SizedBox(height: 16),
+                      _MetricItem(label: 'Volume', value: stock.volume.toString()),
                     ],
                   ),
                 ),
@@ -77,46 +68,58 @@ class StockDetailScreen extends StatelessWidget {
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'About this stock',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'View current market price, track daily movement, and place a broker-routed buy order directly from your phone.',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
+                  child: Text(
+                    'This app routes order requests to licensed brokers and provides market information. '
+                    'It does not execute trades or hold client funds.',
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
               ),
               const Spacer(),
-              SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => BuyOrderScreen(stock: stock),
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 54,
+                      child: OutlinedButton(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => SetPriceAlertScreen(
+                                stockSymbol: stock.symbol,
+                                companyName: stock.companyName,
+                                currentPrice: stock.price,
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('Set Price Alert'),
                       ),
-                    );
-                  },
-                  child: const Text('Buy Shares'),
-                ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(
+                      height: 54,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => BuyOrderScreen(stock: stock),
+                            ),
+                          );
+                        },
+                        child: const Text('Buy Shares'),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
       ),
     );
-  }
-
-  String _formatDate(DateTime dateTime) {
-    return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
   }
 }
 
@@ -133,23 +136,16 @@ class _MetricItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: valueColor,
-                ),
-          ),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.bodyMedium),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(color: valueColor),
+        ),
+      ],
     );
   }
 }

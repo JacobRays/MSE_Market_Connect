@@ -3,8 +3,8 @@ name: Update MSE Prices
 on:
   workflow_dispatch:
   schedule:
-    # Mon–Fri at 18:05 Malawi time (UTC+2) => 16:05 UTC
-    - cron: "5 16 * * 1-5"
+    # every 30 minutes Mon–Fri (UTC). Adjust later for Malawi trading hours if needed.
+    - cron: "*/30 * * * 1-5"
 
 jobs:
   scrape-and-update:
@@ -21,14 +21,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r tools/scraper/requirements.txt
 
-      - name: Update prices from MSE mainboard
+      - name: Update stock prices (MSE mainboard)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python tools/scraper/mse_mainboard_scraper.py
 
-      - name: Trigger price alerts (auto-disable) + create notifications
+      - name: Trigger price alerts -> notifications
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python tools/scraper/process_price_alerts.py
+        run: python tools/scraper/trigger_price_alerts.py
