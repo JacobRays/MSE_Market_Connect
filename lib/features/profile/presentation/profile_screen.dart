@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mse_market_connect/core/services/auth_service.dart';
 import 'package:mse_market_connect/core/services/profile_service.dart';
 import 'package:mse_market_connect/core/theme/app_theme.dart';
+import 'package:mse_market_connect/features/admin/presentation/admin_dashboard_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/my_alerts_screen.dart';
 import 'package:mse_market_connect/features/notifications/presentation/notifications_screen.dart';
 import 'package:mse_market_connect/shared/models/profile_model.dart';
@@ -24,6 +25,8 @@ class ProfileScreen extends StatelessWidget {
           final fullName = profile?.fullName ?? 'No name added';
           final role = profile?.role ?? 'investor';
           final kycStatus = profile?.kycStatus ?? 'pending';
+
+          final isAdmin = role == 'admin';
 
           return Padding(
             padding: const EdgeInsets.all(16),
@@ -87,21 +90,7 @@ class ProfileScreen extends StatelessWidget {
                       const SizedBox(height: 12),
                       Card(
                         child: ListTile(
-                          leading: const Icon(Icons.notifications_none_outlined),
-                          title: const Text('Notifications'),
-                          subtitle: const Text('Price alerts and order updates'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.notifications_outlined),
+                          leading: const Icon(Icons.track_changes_outlined),
                           title: const Text('Price Alerts'),
                           subtitle: const Text('View and edit your target prices'),
                           trailing: const Icon(Icons.chevron_right),
@@ -113,28 +102,40 @@ class ProfileScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.badge_outlined),
-                          title: const Text('KYC Documents'),
-                          subtitle: const Text('Upload ID and verification documents'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Coming soon')),
-                            );
-                          },
+
+                      if (isAdmin) ...[
+                        Card(
+                          child: ListTile(
+                            leading: const Icon(Icons.admin_panel_settings_outlined),
+                            title: const Text('Admin Dashboard'),
+                            subtitle: const Text('Manage adverts and premium upgrades'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+                              );
+                            },
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
+                        const SizedBox(height: 12),
+                      ],
+
                       Card(
                         child: ListTile(
-                          leading: const Icon(Icons.support_agent_outlined),
-                          title: const Text('Help & Support'),
+                          leading: const Icon(Icons.info_outline),
+                          title: const Text('About'),
+                          subtitle: const Text('How this app works'),
                           trailing: const Icon(Icons.chevron_right),
                           onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Coming soon')),
+                            showDialog(
+                              context: context,
+                              builder: (_) => const AlertDialog(
+                                title: Text('About'),
+                                content: Text(
+                                  'MSE Market Connect routes order requests to licensed brokers. '
+                                  'It does not execute trades or hold client funds.',
+                                ),
+                              ),
                             );
                           },
                         ),
@@ -142,7 +143,7 @@ class ProfileScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
                   height: 52,
@@ -171,10 +172,7 @@ class _InfoChip extends StatelessWidget {
   final String label;
   final String value;
 
-  const _InfoChip({
-    required this.label,
-    required this.value,
-  });
+  const _InfoChip({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
