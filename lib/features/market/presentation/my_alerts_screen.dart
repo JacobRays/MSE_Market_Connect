@@ -36,6 +36,7 @@ class _MyAlertsScreenState extends State<MyAlertsScreen> {
     final sub = await _subs.getOrCreateMySubscription();
     if (!mounted) return;
 
+    // Premium gate: Free users can have only 1 active alert
     if (!sub.isPremium) {
       final activeCount = await _alerts.getMyActiveAlertsCount();
       if (!mounted) return;
@@ -93,14 +94,7 @@ class _MyAlertsScreenState extends State<MyAlertsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Watch (Price Alerts)'),
-        actions: [
-          IconButton(
-            tooltip: 'Add watch',
-            onPressed: _addAlertFromWatchTab,
-            icon: const Icon(Icons.add),
-          ),
-        ],
+        title: const Text('Watch'),
       ),
       body: RefreshIndicator(
         onRefresh: _refresh,
@@ -119,6 +113,8 @@ class _MyAlertsScreenState extends State<MyAlertsScreen> {
             }
 
             final alerts = snapshot.data ?? [];
+
+            // Empty state
             if (alerts.isEmpty) {
               return ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -128,25 +124,44 @@ class _MyAlertsScreenState extends State<MyAlertsScreen> {
                   const Icon(Icons.track_changes_outlined, size: 64),
                   const SizedBox(height: 12),
                   const Center(child: Text('You are not watching any companies yet.')),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   SizedBox(
                     height: 52,
                     child: ElevatedButton.icon(
                       onPressed: _addAlertFromWatchTab,
                       icon: const Icon(Icons.add),
-                      label: const Text('Add a company to watch'),
+                      label: const Text('Add company to watch'),
                     ),
                   ),
                 ],
               );
             }
 
+            // List + footer button (right after watched companies)
             return ListView.separated(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16),
-              itemCount: alerts.length,
+              itemCount: alerts.length + 1,
               separatorBuilder: (context, index) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
+                if (index == alerts.length) {
+                  // Footer button (after list)
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Align(
+                      alignment: Alignment.center,
+                      child: SizedBox(
+                        height: 52,
+                        child: ElevatedButton.icon(
+                          onPressed: _addAlertFromWatchTab,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Add company to watch'),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
                 final a = alerts[index];
                 final isBuy = a.alertType == 'buy';
                 final typeColor = isBuy ? AppTheme.primaryColor : AppTheme.secondaryColor;
