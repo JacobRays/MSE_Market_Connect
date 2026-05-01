@@ -6,6 +6,7 @@ import 'package:mse_market_connect/core/services/watchlist_service.dart';
 import 'package:mse_market_connect/core/theme/app_theme.dart';
 import 'package:mse_market_connect/features/market/presentation/my_alerts_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/stock_detail_screen.dart';
+import 'package:mse_market_connect/features/notifications/presentation/notifications_screen.dart';
 import 'package:mse_market_connect/features/profile/presentation/upgrade_screen.dart';
 import 'package:mse_market_connect/shared/models/stock_model.dart';
 import 'package:mse_market_connect/shared/models/subscription_model.dart';
@@ -31,7 +32,7 @@ class _MarketScreenState extends State<MarketScreen> {
   MarketView _view = MarketView.all;
   bool _loadingWatchlist = true;
 
-  late final RealtimeChannel _stocksChannel;
+  RealtimeChannel? _stocksChannel;
 
   @override
   void initState() {
@@ -49,7 +50,6 @@ class _MarketScreenState extends State<MarketScreen> {
           schema: 'public',
           table: 'stocks',
           callback: (payload) async {
-            // refresh list when backend updates prices
             await _refreshStocks(silent: true);
           },
         )
@@ -58,7 +58,9 @@ class _MarketScreenState extends State<MarketScreen> {
 
   @override
   void dispose() {
-    Supabase.instance.client.removeChannel(_stocksChannel);
+    if (_stocksChannel != null) {
+      Supabase.instance.client.removeChannel(_stocksChannel!);
+    }
     super.dispose();
   }
 
@@ -98,7 +100,6 @@ class _MarketScreenState extends State<MarketScreen> {
     final isWatched = _watchSymbols.contains(symbol);
     final sub = _subscription ?? await _subscriptionService.getOrCreateMySubscription();
 
-    // Free: 1 watch item (your current rule)
     if (!isWatched && !sub.isPremium && _watchSymbols.isNotEmpty) {
       if (!mounted) return;
       _showUpgradeDialog();
@@ -159,13 +160,22 @@ class _MarketScreenState extends State<MarketScreen> {
         title: const Text('Market'),
         actions: [
           IconButton(
+            tooltip: 'Notifications',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+              );
+            },
+            icon: const Icon(Icons.notifications_outlined),
+          ),
+          IconButton(
             tooltip: 'Price Alerts',
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const MyAlertsScreen()),
               );
             },
-            icon: const Icon(Icons.notifications_outlined),
+            icon: const Icon(Icons.track_changes_outlined),
           ),
         ],
       ),

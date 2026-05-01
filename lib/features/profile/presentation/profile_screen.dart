@@ -3,6 +3,7 @@ import 'package:mse_market_connect/core/services/auth_service.dart';
 import 'package:mse_market_connect/core/services/profile_service.dart';
 import 'package:mse_market_connect/core/theme/app_theme.dart';
 import 'package:mse_market_connect/features/market/presentation/my_alerts_screen.dart';
+import 'package:mse_market_connect/features/notifications/presentation/notifications_screen.dart';
 import 'package:mse_market_connect/shared/models/profile_model.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -70,6 +71,34 @@ class ProfileScreen extends StatelessWidget {
                 Expanded(
                   child: ListView(
                     children: [
+                      Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.notifications_none_outlined),
+                          title: const Text('Notifications'),
+                          subtitle: const Text('Price alerts and order updates'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.notifications_none_outlined),
+                          title: const Text('Notifications'),
+                          subtitle: const Text('Price alerts and order updates'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       Card(
                         child: ListTile(
                           leading: const Icon(Icons.notifications_outlined),

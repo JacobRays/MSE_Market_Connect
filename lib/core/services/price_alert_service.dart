@@ -8,21 +8,17 @@ class PriceAlertService {
     final user = _client.auth.currentUser;
     if (user == null) throw StateError('User not logged in');
 
-    // 1) Get alerts
-    final builder = _client
-        .from('price_alerts')
-        .select()
-        .eq('user_id', user.id);
-
-    final response = await (activeOnly
-        ? builder.eq('is_active', true)
-        : builder).order('created_at', ascending: false);
-
+    var query = _client.from('price_alerts').select();
+    query = query.eq('user_id', user.id);
+    if (activeOnly) {
+      query = query.eq('is_active', true);
+    }
+    
+    final response = await query.order('created_at', ascending: false);
     final alertsRaw = (response as List).cast<Map<String, dynamic>>();
 
     if (alertsRaw.isEmpty) return [];
 
-    // 2) Get related stock info for display (company name, current price, % change)
     final symbols = alertsRaw
         .map((e) => e['stock_symbol'] as String?)
         .whereType<String>()
@@ -39,7 +35,6 @@ class PriceAlertService {
       for (final s in stocksList) (s['symbol'] as String): s,
     };
 
-    // 3) Merge stock map into each alert record under the key "stocks"
     final merged = alertsRaw.map((a) {
       final sym = a['stock_symbol'] as String?;
       if (sym != null && bySymbol.containsKey(sym)) {
@@ -56,7 +51,7 @@ class PriceAlertService {
 
   Future<int> getMyActiveAlertsCount() async {
     final user = _client.auth.currentUser;
-    if (user == null) throw StateError('User not logged in');
+    if (user == null) return 0;
 
     final response = await _client
         .from('price_alerts')
@@ -69,8 +64,8 @@ class PriceAlertService {
 
   Future<void> createAlert({
     required String stockSymbol,
-    required String alertType, // buy|sell
-    required String condition, // gte|lte
+    required String alertType,
+    required String condition,
     required double targetPrice,
   }) async {
     final user = _client.auth.currentUser;
@@ -104,18 +99,10 @@ class PriceAlertService {
           'target_price': targetPrice,
           'is_active': isActive,
         })
-        .eq('id', id)
-        .eq('user_id', user.id);
+        .eq('id', id);
   }
 
   Future<void> deleteAlert(int id) async {
-    final user = _client.auth.currentUser;
-    if (user == null) throw StateError('User not logged in');
-
-    await _client
-        .from('price_alerts')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', user.id);
+    await _client.from('price_alerts').delete().eq('id', id);
   }
 }

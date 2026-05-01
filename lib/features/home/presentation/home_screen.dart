@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:mse_market_connect/core/services/ad_service.dart';
 import 'package:mse_market_connect/core/theme/app_theme.dart';
 import 'package:mse_market_connect/features/learning/presentation/learning_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/market_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/my_alerts_screen.dart';
 import 'package:mse_market_connect/features/trade/presentation/my_orders_screen.dart';
+import 'package:mse_market_connect/shared/models/ad_model.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -37,7 +39,7 @@ class HomeScreen extends StatelessWidget {
       ),
       _QuickActionData(
         icon: Icons.notifications_active_rounded,
-        label: 'Alerts',
+        label: 'Watch',
         gradient: const LinearGradient(
           colors: [Color(0xFFF9A825), Color(0xFFFFB300)],
           begin: Alignment.topLeft,
@@ -67,42 +69,17 @@ class HomeScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Text(
-              'Welcome back',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
+            Text('Welcome back', style: Theme.of(context).textTheme.headlineMedium),
             const SizedBox(height: 8),
             Text(
-              'Track MSE prices, set alerts, and submit broker-routed order requests.',
+              'Track MSE prices, set targets, and submit broker-routed orders.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Container(
-                      height: 44,
-                      width: 44,
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryColor.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Icon(Icons.info_outline, color: AppTheme.primaryColor),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Tip: Use Alerts to set target prices and get notified when the price hits your level.',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
+
+            const _AdPanel(),
+
+            const SizedBox(height: 14),
             Text('Quick Actions', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
 
@@ -116,10 +93,124 @@ class HomeScreen extends StatelessWidget {
                 crossAxisSpacing: 12,
                 childAspectRatio: 1.15,
               ),
-              itemBuilder: (context, index) {
-                final item = actions[index];
-                return _QuickAction3DCard(item: item);
-              },
+              itemBuilder: (context, index) => _QuickAction3DCard(item: actions[index]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AdPanel extends StatelessWidget {
+  const _AdPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    final service = AdService();
+
+    return FutureBuilder<List<AdModel>>(
+      future: service.getActiveAds(limit: 5),
+      builder: (context, snapshot) {
+        final ads = snapshot.data ?? [];
+
+        // Always show a panel even if DB has no ads yet
+        if (ads.isEmpty) {
+          return const _AdCard(
+            title: 'Advertise here',
+            subtitle: 'Promote your brand to MSE retail investors',
+            imageUrl: null,
+          );
+        }
+
+        return SizedBox(
+          height: 150,
+          child: PageView.builder(
+            // Full-width pages (no “peek”)
+            controller: PageController(viewportFraction: 1.0),
+            itemCount: ads.length,
+            itemBuilder: (context, index) {
+              final ad = ads[index];
+              return _AdCard(
+                title: ad.title,
+                subtitle: ad.subtitle ?? 'Sponsored',
+                imageUrl: ad.imageUrl,
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _AdCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final String? imageUrl;
+
+  const _AdCard({
+    required this.title,
+    required this.subtitle,
+    required this.imageUrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: (imageUrl != null && imageUrl!.trim().isNotEmpty)
+                  ? Image.network(
+                      imageUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: AppTheme.primaryColor.withValues(alpha: 0.10),
+                      ),
+                    )
+                  : Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppTheme.primaryColor.withValues(alpha: 0.95),
+                            AppTheme.primaryColor.withValues(alpha: 0.60),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                    ),
+            ),
+            Positioned.fill(
+              child: Container(color: Colors.black.withValues(alpha: 0.18)),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -144,7 +235,6 @@ class _QuickActionData {
 
 class _QuickAction3DCard extends StatefulWidget {
   final _QuickActionData item;
-
   const _QuickAction3DCard({required this.item});
 
   @override
@@ -174,13 +264,11 @@ class _QuickAction3DCardState extends State<_QuickAction3DCard> {
                 end: Alignment.bottomRight,
               ),
               boxShadow: [
-                // bottom shadow (depth)
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.10),
                   blurRadius: 18,
                   offset: const Offset(0, 10),
                 ),
-                // top highlight (3D)
                 BoxShadow(
                   color: Colors.white.withValues(alpha: 0.9),
                   blurRadius: 10,
@@ -194,7 +282,6 @@ class _QuickAction3DCardState extends State<_QuickAction3DCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 3D icon bubble
                   Container(
                     height: 46,
                     width: 46,
@@ -209,29 +296,12 @@ class _QuickAction3DCardState extends State<_QuickAction3DCard> {
                         ),
                       ],
                     ),
-                    child: Icon(
-                      widget.item.icon,
-                      color: Colors.white,
-                      size: 26,
-                      shadows: [
-                        Shadow(
-                          color: Colors.black.withValues(alpha: 0.25),
-                          blurRadius: 10,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
+                    child: Icon(widget.item.icon, color: Colors.white, size: 26),
                   ),
                   const Spacer(),
-                  Text(
-                    widget.item.label,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
+                  Text(widget.item.label, style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 4),
-                  Text(
-                    'Tap to open',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
+                  Text('Tap to open', style: Theme.of(context).textTheme.bodyMedium),
                 ],
               ),
             ),
