@@ -32,7 +32,7 @@ class AdminAdService {
       'action_url': actionUrl,
       'is_active': isActive,
       'priority': priority,
-      if (id != null) 'id': id,
+      ...?(id == null ? null : <String, dynamic>{'id': id}),
     };
 
     await _client.from('ads').upsert(payload, onConflict: 'id');
