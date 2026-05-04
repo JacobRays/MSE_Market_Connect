@@ -4,6 +4,7 @@ import 'package:mse_market_connect/core/theme/app_theme.dart';
 import 'package:mse_market_connect/features/learning/presentation/learning_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/market_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/my_alerts_screen.dart';
+import 'package:mse_market_connect/features/profile/presentation/upgrade_screen.dart';
 import 'package:mse_market_connect/features/trade/presentation/my_orders_screen.dart';
 import 'package:mse_market_connect/shared/models/ad_model.dart';
 
@@ -38,7 +39,7 @@ class HomeScreen extends StatelessWidget {
         ),
       ),
       _QuickActionData(
-        icon: Icons.notifications_active_rounded,
+        icon: Icons.track_changes_rounded,
         label: 'Watch',
         gradient: const LinearGradient(
           colors: [Color(0xFFF9A825), Color(0xFFFFB300)],
@@ -77,9 +78,64 @@ class HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 14),
 
-            const _AdPanel(),
+            // Premium card on home page
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      height: 48,
+                      width: 48,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [AppTheme.secondaryColor, Color(0xFFFFD54F)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Icon(Icons.workspace_premium, color: Colors.white),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Upgrade to Premium',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'MWK 50,000/month • Unlimited watched companies & alerts',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            height: 44,
+                            child: ElevatedButton(
+                              onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => const UpgradeScreen()),
+                              ),
+                              child: const Text('Upgrade'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
             const SizedBox(height: 14),
+
+            // Bigger advertising panel
+            const _AdPanel(),
+
+            const SizedBox(height: 16),
             Text('Quick Actions', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
 
@@ -91,7 +147,7 @@ class HomeScreen extends StatelessWidget {
                 crossAxisCount: 2,
                 mainAxisSpacing: 12,
                 crossAxisSpacing: 12,
-                childAspectRatio: 1.15,
+                childAspectRatio: 1.25, // less tall
               ),
               itemBuilder: (context, index) => _QuickAction3DCard(item: actions[index]),
             ),
@@ -114,7 +170,6 @@ class _AdPanel extends StatelessWidget {
       builder: (context, snapshot) {
         final ads = snapshot.data ?? [];
 
-        // Always show a panel even if DB has no ads yet
         if (ads.isEmpty) {
           return const _AdCard(
             title: 'Advertise here',
@@ -124,9 +179,8 @@ class _AdPanel extends StatelessWidget {
         }
 
         return SizedBox(
-          height: 150,
+          height: 190, // bigger panel
           child: PageView.builder(
-            // Full-width pages (no “peek”)
             controller: PageController(viewportFraction: 1.0),
             itemCount: ads.length,
             itemBuilder: (context, index) {
@@ -184,9 +238,7 @@ class _AdCard extends StatelessWidget {
                       ),
                     ),
             ),
-            Positioned.fill(
-              child: Container(color: Colors.black.withValues(alpha: 0.18)),
-            ),
+            Positioned.fill(child: Container(color: Colors.black.withValues(alpha: 0.18))),
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -247,8 +299,8 @@ class _QuickAction3DCardState extends State<_QuickAction3DCard> {
   @override
   Widget build(BuildContext context) {
     return AnimatedScale(
-      scale: _pressed ? 0.98 : 1.0,
-      duration: const Duration(milliseconds: 120),
+      scale: _pressed ? 0.985 : 1.0,
+      duration: const Duration(milliseconds: 110),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -266,42 +318,38 @@ class _QuickAction3DCardState extends State<_QuickAction3DCard> {
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.10),
-                  blurRadius: 18,
+                  blurRadius: 16,
                   offset: const Offset(0, 10),
-                ),
-                BoxShadow(
-                  color: Colors.white.withValues(alpha: 0.9),
-                  blurRadius: 10,
-                  offset: const Offset(-6, -6),
                 ),
               ],
               border: Border.all(color: const Color(0xFFE6EDF7)),
             ),
             child: Padding(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(12), // less padding
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Bigger 3D icon bubble
                   Container(
-                    height: 46,
-                    width: 46,
+                    height: 58,
+                    width: 58,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(18),
                       gradient: widget.item.gradient,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.18),
+                          color: Colors.black.withValues(alpha: 0.20),
                           blurRadius: 14,
                           offset: const Offset(0, 8),
                         ),
                       ],
                     ),
-                    child: Icon(widget.item.icon, color: Colors.white, size: 26),
+                    child: Icon(widget.item.icon, color: Colors.white, size: 32),
                   ),
                   const Spacer(),
                   Text(widget.item.label, style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 4),
-                  Text('Tap to open', style: Theme.of(context).textTheme.bodyMedium),
+                  const SizedBox(height: 2),
+                  Text('Open', style: Theme.of(context).textTheme.bodyMedium),
                 ],
               ),
             ),
