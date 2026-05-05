@@ -17,11 +17,11 @@ class AdminPremiumRequestService {
   final SupabaseClient _client = Supabase.instance.client;
   final AdminSubscriptionService _subs = AdminSubscriptionService();
 
-  Future<List<AdminPremiumRequestView>> getPendingRequests() async {
+  Future<List<AdminPremiumRequestView>> getRequestsByStatus(String status) async {
     final resp = await _client
         .from('premium_upgrade_requests')
         .select()
-        .eq('status', 'pending')
+        .eq('status', status)
         .order('created_at', ascending: false);
 
     final requests = (resp as List)
