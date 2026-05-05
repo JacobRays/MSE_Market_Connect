@@ -37,8 +37,24 @@ class _PremiumRequestsScreenState extends State<PremiumRequestsScreen> {
     await _future;
   }
 
+  Future<void> _openReceipt(
+    AdminPremiumRequestView x, {
+    required ScaffoldMessengerState messenger,
+  }) async {
+    try {
+      final url = await _service.getSignedReceiptUrl(x.request.receiptPath);
+      await launchUrl(Uri.parse(url), mode: LaunchMode.platformDefault);
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to open receipt: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final messenger = ScaffoldMessenger.of(context);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Premium Requests')),
       body: Column(
@@ -84,12 +100,7 @@ class _PremiumRequestsScreenState extends State<PremiumRequestsScreen> {
                       padding: const EdgeInsets.all(16),
                       children: [
                         const SizedBox(height: 40),
-                        Center(
-                          child: Text(
-                            'No ${_filter.name} requests.',
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
+                        Center(child: Text('No ${_filter.name} requests.')),
                       ],
                     );
                   }
@@ -101,7 +112,11 @@ class _PremiumRequestsScreenState extends State<PremiumRequestsScreen> {
                     separatorBuilder: (context, index) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final x = items[index];
-                      final email = x.profile?.email ?? x.request.userId;
+                      final p = x.profile;
+
+                      final email = p?.email ?? x.request.userId;
+                      final name = (p?.fullName?.trim().isNotEmpty ?? false) ? p!.fullName! : null;
+                      final phone = (p?.phone?.trim().isNotEmpty ?? false) ? p!.phone! : null;
 
                       return Card(
                         child: ListTile(
@@ -128,26 +143,32 @@ class _PremiumRequestsScreenState extends State<PremiumRequestsScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: [
                                     Text(email, style: Theme.of(context).textTheme.titleLarge),
-                                    const SizedBox(height: 8),
+                                    if (name != null) ...[
+                                      const SizedBox(height: 4),
+                                      Text('Name: $name'),
+                                    ],
+                                    if (phone != null) ...[
+                                      const SizedBox(height: 4),
+                                      Text('Phone: $phone'),
+                                    ],
+                                    const SizedBox(height: 10),
                                     Text('Status: ${x.request.status.toUpperCase()}'),
                                     const SizedBox(height: 12),
                                     SizedBox(
                                       height: 52,
                                       child: OutlinedButton.icon(
-                                        onPressed: () async {
-                                          final url = await _service.getSignedReceiptUrl(
-                                            x.request.receiptPath,
-                                          );
-                                          await launchUrl(Uri.parse(url));
-                                        },
+                                        onPressed: () => _openReceipt(x, messenger: messenger),
                                         icon: const Icon(Icons.receipt_long),
-                                        label: const Text('View receipt'),
+                                        label: const Text('View payment proof'),
                                       ),
                                     ),
                                     const SizedBox(height: 12),
                                     TextField(
                                       controller: note,
-                                      decoration: const InputDecoration(labelText: 'Admin note (optional)'),
+                                      decoration: const InputDecoration(
+                                        labelText: 'Admin note / rejection reason',
+                                        hintText: 'Required when rejecting',
+                                      ),
                                       maxLines: 2,
                                     ),
                                     const SizedBox(height: 12),
@@ -158,14 +179,22 @@ class _PremiumRequestsScreenState extends State<PremiumRequestsScreen> {
                                         child: ElevatedButton(
                                           onPressed: () async {
                                             Navigator.pop(context);
-                                            await _service.approveRequest(
-                                              requestId: x.request.id,
-                                              userId: x.request.userId,
-                                              adminNote: note.text.trim().isEmpty ? null : note.text.trim(),
-                                              premiumDays: 30,
-                                            );
-                                            if (!mounted) return;
-                                            await _refresh(); // moves it out of pending
+                                            try {
+                                              await _service.approveRequest(
+                                                requestId: x.request.id,
+                                                userId: x.request.userId,
+                                                adminNote: note.text.trim().isEmpty ? null : note.text.trim(),
+                                                premiumDays: 30,
+                                              );
+                                              if (!mounted) return;
+                                              messenger.showSnackBar(const SnackBar(content: Text('Approved')));
+                                              await _refresh();
+                                            } catch (e) {
+                                              if (!mounted) return;
+                                              messenger.showSnackBar(
+                                                SnackBar(content: Text('Approve failed: $e')),
+                                              );
+                                            }
                                           },
                                           child: const Text('Approve (Premium 30 days)'),
                                         ),
@@ -175,18 +204,34 @@ class _PremiumRequestsScreenState extends State<PremiumRequestsScreen> {
                                         height: 52,
                                         child: OutlinedButton(
                                           onPressed: () async {
+                                            final reason = note.text.trim();
+                                            if (reason.isEmpty) {
+                                              messenger.showSnackBar(
+                                                const SnackBar(content: Text('Rejection reason is required')),
+                                              );
+                                              return;
+                                            }
                                             Navigator.pop(context);
-                                            await _service.rejectRequest(
-                                              requestId: x.request.id,
-                                              adminNote: note.text.trim().isEmpty ? null : note.text.trim(),
-                                            );
-                                            if (!mounted) return;
-                                            await _refresh(); // moves it out of pending
+                                            try {
+                                              await _service.rejectRequest(
+                                                requestId: x.request.id,
+                                                adminNote: reason,
+                                              );
+                                              if (!mounted) return;
+                                              messenger.showSnackBar(const SnackBar(content: Text('Rejected')));
+                                              await _refresh();
+                                            } catch (e) {
+                                              if (!mounted) return;
+                                              messenger.showSnackBar(
+                                                SnackBar(content: Text('Reject failed: $e')),
+                                              );
+                                            }
                                           },
-                                          child: const Text('Reject'),
+                                          child: const Text('Reject (with reason)'),
                                         ),
                                       ),
                                     ],
+                                    const SizedBox(height: 10),
                                   ],
                                 ),
                               ),

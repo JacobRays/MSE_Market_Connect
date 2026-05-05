@@ -133,6 +133,19 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
     }
   }
 
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'pending':
+        return 'PENDING';
+      case 'approved':
+        return 'APPROVED';
+      case 'rejected':
+        return 'REJECTED';
+      default:
+        return status.toUpperCase();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -168,8 +181,10 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text('Submit proof of payment',
-                              style: Theme.of(context).textTheme.titleMedium),
+                          Text(
+                            'Submit proof of payment',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
                           const SizedBox(height: 12),
                           DropdownButtonFormField<String>(
                             initialValue: _method,
@@ -237,21 +252,31 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                       ),
                     )
                   else
-                    ..._requests.map((r) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Card(
-                            child: ListTile(
-                              title: Text(
-                                'MWK ${r.amount.toStringAsFixed(0)} • ${r.status.toUpperCase()}',
-                              ),
-                              subtitle: Text(
-                                (r.payerReference == null || r.payerReference!.isEmpty)
-                                    ? 'Reference: —'
-                                    : 'Reference: ${r.payerReference}',
-                              ),
+                    ..._requests.map((r) {
+                      final status = r.status;
+                      final label = _statusLabel(status);
+                      final reason = (status == 'rejected' &&
+                              r.adminNote != null &&
+                              r.adminNote!.trim().isNotEmpty)
+                          ? 'REJECTED — reason: ${r.adminNote}'
+                          : null;
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Card(
+                          child: ListTile(
+                            title: Text('MWK ${r.amount.toStringAsFixed(0)} • $label'),
+                            subtitle: Text(
+                              reason ??
+                                  ((r.payerReference == null ||
+                                          r.payerReference!.trim().isEmpty)
+                                      ? 'Reference: —'
+                                      : 'Reference: ${r.payerReference}'),
                             ),
                           ),
-                        )),
+                        ),
+                      );
+                    }),
                 ],
               ),
             ),
