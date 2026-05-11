@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mse_market_connect/features/admin/presentation/manage_ads_screen.dart';
+import 'package:mse_market_connect/features/admin/presentation/premium_requests_screen.dart';
 import 'package:mse_market_connect/features/admin/presentation/manage_subscriptions_screen.dart';
 
 class AdminDashboardScreen extends StatelessWidget {
@@ -12,6 +13,18 @@ class AdminDashboardScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.inbox_outlined),
+              title: const Text('Premium Requests (Proof Uploads)'),
+              subtitle: const Text('Review receipt, approve or reject with reason'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const PremiumRequestsScreen()),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           Card(
             child: ListTile(
               leading: const Icon(Icons.campaign_outlined),
@@ -27,8 +40,8 @@ class AdminDashboardScreen extends StatelessWidget {
           Card(
             child: ListTile(
               leading: const Icon(Icons.workspace_premium_outlined),
-              title: const Text('Premium Upgrades'),
-              subtitle: const Text('Approve premium access (manual for now)'),
+              title: const Text('Premium Plans (Advanced)'),
+              subtitle: const Text('Manually set plans (use only if needed)'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const ManageSubscriptionsScreen()),
@@ -40,8 +53,7 @@ class AdminDashboardScreen extends StatelessWidget {
             child: Padding(
               padding: EdgeInsets.all(16),
               child: Text(
-                'Note: Premium is manual until payment integration (Mpamba/Airtel Money/bank) is added. '
-                'Later upgrades can become automatic via payment confirmation webhooks.',
+                'Normal flow: user uploads proof → admin approves/rejects in Premium Requests.',
               ),
             ),
           ),

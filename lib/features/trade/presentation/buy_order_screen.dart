@@ -55,6 +55,7 @@ class _BuyOrderScreenState extends State<BuyOrderScreen> {
 
   Future<void> _submitOrder() async {
     if (quantity <= 0) return;
+
     if (_selectedBroker == null) {
       await _pickBroker();
       if (_selectedBroker == null) return;
@@ -63,13 +64,13 @@ class _BuyOrderScreenState extends State<BuyOrderScreen> {
     setState(() => _submitting = true);
 
     try {
-      final orderId = await _orderService.createBuyOrder(
+      final orderId = await _orderService.createMarketRequestOrder(
         stock: widget.stock,
         broker: _selectedBroker!,
+        side: 'buy',
         quantity: quantity,
-        investorNote: _noteController.text.trim().isEmpty
-            ? null
-            : _noteController.text.trim(),
+        investorNote:
+            _noteController.text.trim().isEmpty ? null : _noteController.text.trim(),
       );
 
       if (!mounted) return;
@@ -107,12 +108,15 @@ class _BuyOrderScreenState extends State<BuyOrderScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(stock.symbol, style: Theme.of(context).textTheme.headlineMedium),
+                      Text(stock.symbol,
+                          style: Theme.of(context).textTheme.headlineMedium),
                       const SizedBox(height: 8),
                       Text(stock.companyName),
                       const SizedBox(height: 12),
-                      Text('Current Price: MWK ${stock.price.toStringAsFixed(2)}',
-                          style: Theme.of(context).textTheme.titleMedium),
+                      Text(
+                        'Current Price: MWK ${stock.price.toStringAsFixed(2)}',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                     ],
                   ),
                 ),
@@ -149,7 +153,7 @@ class _BuyOrderScreenState extends State<BuyOrderScreen> {
                       TextField(
                         controller: _noteController,
                         decoration: const InputDecoration(
-                          labelText: 'Note (optional)',
+                          labelText: 'Instruction to broker (optional)',
                           hintText: 'Any instructions for the broker',
                         ),
                         maxLines: 2,
@@ -172,7 +176,7 @@ class _BuyOrderScreenState extends State<BuyOrderScreen> {
                         title: Text(_selectedBroker?.name ?? 'Select a broker'),
                         subtitle: Text(
                           _selectedBroker == null
-                              ? 'Choose a licensed broker to route your order.'
+                              ? 'Choose a licensed broker to route your request.'
                               : 'Fee rate: ${(feeRate * 100).toStringAsFixed(2)}%',
                         ),
                         trailing: const Icon(Icons.chevron_right),
@@ -189,13 +193,14 @@ class _BuyOrderScreenState extends State<BuyOrderScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Order Estimate', style: Theme.of(context).textTheme.titleMedium),
+                      Text('Estimate', style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(height: 16),
                       _row('Subtotal', 'MWK ${subtotal.toStringAsFixed(2)}'),
                       const SizedBox(height: 8),
                       _row('Brokerage Fee', 'MWK ${brokerageFee.toStringAsFixed(2)}'),
                       const Divider(height: 24),
-                      _row('Total Estimate', 'MWK ${totalEstimate.toStringAsFixed(2)}', bold: true),
+                      _row('Total Estimate', 'MWK ${totalEstimate.toStringAsFixed(2)}',
+                          bold: true),
                     ],
                   ),
                 ),
@@ -211,7 +216,7 @@ class _BuyOrderScreenState extends State<BuyOrderScreen> {
                           width: 22,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Submit Order Request'),
+                      : const Text('Submit Buy Request'),
                 ),
               ),
             ],

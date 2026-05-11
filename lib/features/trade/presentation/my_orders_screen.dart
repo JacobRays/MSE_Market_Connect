@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mse_market_connect/core/services/trade_order_service.dart';
+import 'package:mse_market_connect/features/trade/presentation/order_detail_screen.dart';
+import 'package:mse_market_connect/shared/models/trade_order_model.dart';
 
 class MyOrdersScreen extends StatefulWidget {
   const MyOrdersScreen({super.key});
@@ -10,20 +12,21 @@ class MyOrdersScreen extends StatefulWidget {
 
 class _MyOrdersScreenState extends State<MyOrdersScreen> {
   final _service = TradeOrderService();
-  late Future<List<Map<String, dynamic>>> _future;
+  late Future<List<TradeOrderModel>> _future;
 
   @override
   void initState() {
     super.initState();
-    _future = _service.getMyOrders();
+    _future = _service.getMyOrders(limit: 100);
   }
 
   Future<void> _refresh() async {
-    setState(() {
-      _future = _service.getMyOrders();
-    });
+    setState(() => _future = _service.getMyOrders(limit: 100));
     await _future;
   }
+
+  String _fmt(DateTime dt) =>
+      '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +34,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
       appBar: AppBar(title: const Text('My Orders')),
       body: RefreshIndicator(
         onRefresh: _refresh,
-        child: FutureBuilder<List<Map<String, dynamic>>>(
+        child: FutureBuilder<List<TradeOrderModel>>(
           future: _future,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
@@ -67,24 +70,31 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
               separatorBuilder: (context, index) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final o = orders[index];
+                final total = o.totalEstimate == null
+                    ? '—'
+                    : 'MWK ${o.totalEstimate!.toStringAsFixed(2)}';
+
                 return Card(
                   child: ListTile(
-                    title: Text('${o['stock_symbol']} • ${(o['side'] as String).toUpperCase()}'),
-                    subtitle: Text('Qty: ${o['quantity']}  •  Status: ${o['status']}'),
+                    isThreeLine: true,
+                    title: Text('${o.stockSymbol} • ${o.side.toUpperCase()}'),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Broker: ${o.brokerName ?? '—'}'),
+                          Text('Date: ${_fmt(o.createdAt)}'),
+                          Text('Qty: ${o.quantity}  •  Total: $total'),
+                          Text('Status: ${o.status.toUpperCase()}'),
+                        ],
+                      ),
+                    ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () {
-                      // Later: order detail screen
-                      showDialog(
-                        context: context,
-                        builder: (_) => AlertDialog(
-                          title: const Text('Order Details'),
-                          content: Text('Order ID:\n${o['id']}'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Close'),
-                            ),
-                          ],
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => OrderDetailScreen(orderId: o.id),
                         ),
                       );
                     },

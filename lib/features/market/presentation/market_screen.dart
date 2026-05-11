@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:mse_market_connect/core/services/market_service.dart';
-import 'package:mse_market_connect/core/services/subscription_service.dart';
-import 'package:mse_market_connect/core/services/watchlist_service.dart';
+import 'package:mse_market_connect/core/services/price_alert_service.dart';
 import 'package:mse_market_connect/core/theme/app_theme.dart';
+import 'package:mse_market_connect/features/market/presentation/market_action_sheet.dart';
 import 'package:mse_market_connect/features/market/presentation/my_alerts_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/stock_detail_screen.dart';
 import 'package:mse_market_connect/features/notifications/presentation/notifications_screen.dart';
-import 'package:mse_market_connect/features/profile/presentation/upgrade_screen.dart';
+import 'package:mse_market_connect/shared/models/price_alert_model.dart';
 import 'package:mse_market_connect/shared/models/stock_model.dart';
-import 'package:mse_market_connect/shared/models/subscription_model.dart';
 
-enum MarketView { all, watchlist }
+enum MarketView { all, alerts }
 
 class MarketScreen extends StatefulWidget {
   const MarketScreen({super.key});
@@ -22,15 +21,13 @@ class MarketScreen extends StatefulWidget {
 
 class _MarketScreenState extends State<MarketScreen> {
   final MarketService _marketService = MarketService();
-  final WatchlistService _watchlistService = WatchlistService();
-  final SubscriptionService _subscriptionService = SubscriptionService();
+  final PriceAlertService _alertService = PriceAlertService();
 
   late Future<List<StockModel>> _stocksFuture;
-  Set<String> _watchSymbols = {};
-  SubscriptionModel? _subscription;
 
+  bool _loadingAlerts = true;
   MarketView _view = MarketView.all;
-  bool _loadingWatchlist = true;
+  final Map<String, PriceAlertModel> _activeAlertBySymbol = {};
 
   RealtimeChannel? _stocksChannel;
 
@@ -38,7 +35,7 @@ class _MarketScreenState extends State<MarketScreen> {
   void initState() {
     super.initState();
     _stocksFuture = _marketService.getStocks();
-    _loadWatchlistAndPlan();
+    _loadActiveAlerts();
     _listenToStockUpdates();
   }
 
@@ -50,7 +47,7 @@ class _MarketScreenState extends State<MarketScreen> {
           schema: 'public',
           table: 'stocks',
           callback: (payload) async {
-            await _refreshStocks(silent: true);
+            await _refresh(silent: true);
           },
         )
         .subscribe();
@@ -64,30 +61,29 @@ class _MarketScreenState extends State<MarketScreen> {
     super.dispose();
   }
 
-  Future<void> _loadWatchlistAndPlan() async {
+  Future<void> _loadActiveAlerts() async {
+    setState(() => _loadingAlerts = true);
     try {
-      final symbols = await _watchlistService.getMyWatchlistSymbols();
-      final sub = await _subscriptionService.getOrCreateMySubscription();
-
+      final list = await _alertService.getMyAlerts(activeOnly: true);
       if (!mounted) return;
-      setState(() {
-        _watchSymbols = symbols;
-        _subscription = sub;
-        _loadingWatchlist = false;
-      });
+
+      _activeAlertBySymbol
+        ..clear()
+        ..addEntries(list.map((a) => MapEntry(a.stockSymbol, a)));
+
+      setState(() => _loadingAlerts = false);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _loadingWatchlist = false);
+      setState(() => _loadingAlerts = false);
     }
   }
 
-  Future<void> _refreshStocks({bool silent = false}) async {
+  Future<void> _refresh({bool silent = false}) async {
     setState(() {
       _stocksFuture = _marketService.getStocks();
     });
-
     await _stocksFuture;
-    await _loadWatchlistAndPlan();
+    await _loadActiveAlerts();
 
     if (!silent && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -96,64 +92,16 @@ class _MarketScreenState extends State<MarketScreen> {
     }
   }
 
-  Future<void> _toggleWatch(String symbol) async {
-    final isWatched = _watchSymbols.contains(symbol);
-    final sub = _subscription ?? await _subscriptionService.getOrCreateMySubscription();
-
-    if (!isWatched && !sub.isPremium && _watchSymbols.isNotEmpty) {
-      if (!mounted) return;
-      _showUpgradeDialog();
-      return;
-    }
-
-    try {
-      if (isWatched) {
-        await _watchlistService.removeFromWatchlist(symbol);
-        setState(() => _watchSymbols.remove(symbol));
-      } else {
-        await _watchlistService.addToWatchlist(symbol);
-        setState(() => _watchSymbols.add(symbol));
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Watchlist update failed: $e')),
-      );
-    }
-  }
-
-  void _showUpgradeDialog() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Premium required'),
-          content: const Text(
-            'Free users can watch only 1 company.\n\nUpgrade to Premium (MWK 50,000/month) to watch unlimited companies.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Not now'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const UpgradeScreen()),
-                );
-              },
-              child: const Text('View Premium'),
-            ),
-          ],
-        );
-      },
-    );
+  String _alertLine(PriceAlertModel a) {
+    final isBuy = a.alertType == 'buy';
+    return isBuy
+        ? 'Watching: BUY when price ≤ MWK ${a.targetPrice.toStringAsFixed(2)}'
+        : 'Watching: SELL when price ≥ MWK ${a.targetPrice.toStringAsFixed(2)}';
   }
 
   @override
   Widget build(BuildContext context) {
-    final canShowWatchlistToggle = !_loadingWatchlist;
+    final canShowToggle = !_loadingAlerts;
 
     return Scaffold(
       appBar: AppBar(
@@ -161,26 +109,22 @@ class _MarketScreenState extends State<MarketScreen> {
         actions: [
           IconButton(
             tooltip: 'Notifications',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-              );
-            },
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+            ),
             icon: const Icon(Icons.notifications_outlined),
           ),
           IconButton(
-            tooltip: 'Price Alerts',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const MyAlertsScreen()),
-              );
-            },
+            tooltip: 'Watch (Price Alerts)',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const MyAlertsScreen()),
+            ),
             icon: const Icon(Icons.track_changes_outlined),
           ),
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () => _refreshStocks(),
+        onRefresh: () => _refresh(),
         child: FutureBuilder<List<StockModel>>(
           future: _stocksFuture,
           builder: (context, snapshot) {
@@ -205,19 +149,20 @@ class _MarketScreenState extends State<MarketScreen> {
             }
 
             final allStocks = snapshot.data ?? [];
+
             final stocks = _view == MarketView.all
                 ? allStocks
-                : allStocks.where((s) => _watchSymbols.contains(s.symbol)).toList();
+                : allStocks.where((s) => _activeAlertBySymbol.containsKey(s.symbol)).toList();
 
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16),
               children: [
-                if (canShowWatchlistToggle) ...[
+                if (canShowToggle) ...[
                   SegmentedButton<MarketView>(
                     segments: const [
                       ButtonSegment(value: MarketView.all, label: Text('All')),
-                      ButtonSegment(value: MarketView.watchlist, label: Text('Watchlist')),
+                      ButtonSegment(value: MarketView.alerts, label: Text('Alerts')),
                     ],
                     selected: {_view},
                     onSelectionChanged: (set) => setState(() => _view = set.first),
@@ -229,15 +174,15 @@ class _MarketScreenState extends State<MarketScreen> {
                   const Icon(Icons.show_chart, size: 64),
                   const SizedBox(height: 12),
                   Text(
-                    _view == MarketView.watchlist
-                        ? 'No stocks in your watchlist yet.'
+                    _view == MarketView.alerts
+                        ? 'No watched companies yet.\nSet a price alert to start watching.'
                         : 'No stocks available yet.',
                     textAlign: TextAlign.center,
                   ),
                 ] else ...[
                   ...stocks.map((stock) {
                     final isPositive = stock.changePercent >= 0;
-                    final isWatched = _watchSymbols.contains(stock.symbol);
+                    final alert = _activeAlertBySymbol[stock.symbol];
 
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12),
@@ -245,9 +190,7 @@ class _MarketScreenState extends State<MarketScreen> {
                         child: ListTile(
                           onTap: () {
                             Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => StockDetailScreen(stock: stock),
-                              ),
+                              MaterialPageRoute(builder: (_) => StockDetailScreen(stock: stock)),
                             );
                           },
                           contentPadding: const EdgeInsets.all(16),
@@ -255,21 +198,30 @@ class _MarketScreenState extends State<MarketScreen> {
                               style: Theme.of(context).textTheme.titleMedium),
                           subtitle: Padding(
                             padding: const EdgeInsets.only(top: 6),
-                            child: Text(stock.companyName),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(stock.companyName),
+                                if (alert != null) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    _alertLine(alert),
+                                    style: const TextStyle(fontWeight: FontWeight.w700),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
                           trailing: SizedBox(
-                            width: 170,
+                            width: 210,
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
-                                IconButton(
-                                  onPressed: () => _toggleWatch(stock.symbol),
-                                  icon: Icon(
-                                    isWatched ? Icons.star : Icons.star_border,
-                                    color: isWatched ? AppTheme.secondaryColor : null,
-                                  ),
+                                TextButton(
+                                  onPressed: () => MarketActionSheet.show(context, stock),
+                                  child: const Text('Trade'),
                                 ),
-                                const SizedBox(width: 6),
+                                const SizedBox(width: 8),
                                 Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   crossAxisAlignment: CrossAxisAlignment.end,
