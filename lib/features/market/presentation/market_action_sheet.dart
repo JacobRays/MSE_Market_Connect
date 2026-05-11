@@ -1,9 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:mse_market_connect/core/services/broker_service.dart';
 import 'package:mse_market_connect/core/services/price_alert_service.dart';
 import 'package:mse_market_connect/core/services/subscription_service.dart';
 import 'package:mse_market_connect/core/services/trade_order_service.dart';
-import 'package:mse_market_connect/core/theme/app_theme.dart';
-import 'package:mse_market_connect/features/brokers/presentation/broker_select_screen.dart';
 import 'package:mse_market_connect/features/profile/presentation/upgrade_screen.dart';
 import 'package:mse_market_connect/shared/models/broker_model.dart';
 import 'package:mse_market_connect/shared/models/stock_model.dart';
@@ -11,10 +11,7 @@ import 'package:mse_market_connect/shared/models/stock_model.dart';
 class MarketActionSheet extends StatefulWidget {
   final StockModel stock;
 
-  const MarketActionSheet({
-    super.key,
-    required this.stock,
-  });
+  const MarketActionSheet({super.key, required this.stock});
 
   static Future<void> show(BuildContext context, StockModel stock) async {
     await showModalBottomSheet(
@@ -34,34 +31,49 @@ class _MarketActionSheetState extends State<MarketActionSheet>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
 
-  // Order
-  final _qty = TextEditingController();
+  final _brokerService = BrokerService();
+  List<BrokerModel> _brokers = [];
+  bool _brokersLoading = true;
+
+  final _qty = TextEditingController(text: '100');
   final _note = TextEditingController();
   BrokerModel? _broker;
   bool _submitting = false;
 
-  // Alert (standalone tab)
-  final _alertTarget = TextEditingController();
-  String _alertType = 'buy'; // buy|sell
+  // Alerts
+  final _alerts = PriceAlertService();
+  final _subs = SubscriptionService();
+  final _orders = TradeOrderService();
 
-  // Optional alert-with-order
+  final _alertTarget = TextEditingController();
+  String _alertType = 'buy';
+
   bool _alsoCreateAlert = false;
   final _alsoAlertTarget = TextEditingController();
   String _alsoAlertType = 'buy';
-
-  final _orders = TradeOrderService();
-  final _alerts = PriceAlertService();
-  final _subs = SubscriptionService();
 
   @override
   void initState() {
     super.initState();
     _tabs = TabController(length: 3, vsync: this);
-
-    // sensible defaults
-    _qty.text = '100';
     _alertTarget.text = widget.stock.price.toStringAsFixed(2);
     _alsoAlertTarget.text = widget.stock.price.toStringAsFixed(2);
+    _loadBrokers();
+  }
+
+  Future<void> _loadBrokers() async {
+    try {
+      final list = await _brokerService.getActiveBrokers();
+      if (!mounted) return;
+      setState(() {
+        _brokers = list;
+        _brokersLoading = false;
+        if (_broker == null && _brokers.isNotEmpty) _broker = _brokers.first;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _brokersLoading = false);
+    }
   }
 
   @override
@@ -75,19 +87,12 @@ class _MarketActionSheetState extends State<MarketActionSheet>
   }
 
   int get _quantity => int.tryParse(_qty.text.trim()) ?? 0;
-
   double get _feeRate => _broker?.feeRate ?? 0.02;
   double get _subtotal => _quantity * widget.stock.price;
   double get _fee => _subtotal * _feeRate;
   double get _total => _subtotal + _fee;
 
-  Future<void> _pickBroker() async {
-    final b = await Navigator.of(context).push<BrokerModel>(
-      MaterialPageRoute(builder: (_) => const BrokerSelectScreen()),
-    );
-    if (!mounted) return;
-    if (b != null) setState(() => _broker = b);
-  }
+  String _conditionForType(String type) => type == 'buy' ? 'lte' : 'gte';
 
   Future<bool> _ensureAlertAllowed() async {
     final sub = await _subs.getOrCreateMySubscription();
@@ -104,16 +109,11 @@ class _MarketActionSheetState extends State<MarketActionSheet>
               'Upgrade to Premium (MWK 50,000/month) for unlimited alerts.',
             ),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Not now'),
-              ),
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Not now')),
               ElevatedButton(
                 onPressed: () {
                   Navigator.pop(context);
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const UpgradeScreen()),
-                  );
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const UpgradeScreen()));
                 },
                 child: const Text('Upgrade'),
               ),
@@ -126,13 +126,59 @@ class _MarketActionSheetState extends State<MarketActionSheet>
     return true;
   }
 
-  String _conditionForType(String type) {
-    // buy alert triggers when price <= target
-    // sell alert triggers when price >= target
-    return type == 'buy' ? 'lte' : 'gte';
+  Future<void> _submitOrder(String side) async {
+    final messenger = ScaffoldMessenger.of(context);
+
+    if (_quantity <= 0) {
+      messenger.showSnackBar(const SnackBar(content: Text('Enter a valid quantity')));
+      return;
+    }
+    if (_broker == null) {
+      messenger.showSnackBar(const SnackBar(content: Text('Please select a broker')));
+      return;
+    }
+
+    double? alsoTarget;
+    if (_alsoCreateAlert) {
+      alsoTarget = double.tryParse(_alsoAlertTarget.text.trim());
+      if (alsoTarget == null || alsoTarget <= 0) {
+        messenger.showSnackBar(const SnackBar(content: Text('Enter a valid alert target price')));
+        return;
+      }
+      final allowed = await _ensureAlertAllowed();
+      if (!allowed) return;
+    }
+
+    setState(() => _submitting = true);
+    try {
+      final orderId = await _orders.createMarketRequestOrder(
+        stock: widget.stock,
+        broker: _broker!,
+        side: side,
+        quantity: _quantity,
+        investorNote: _note.text.trim().isEmpty ? null : _note.text.trim(),
+      );
+
+      if (_alsoCreateAlert && alsoTarget != null) {
+        await _alerts.createAlert(
+          stockSymbol: widget.stock.symbol,
+          alertType: _alsoAlertType,
+          condition: _conditionForType(_alsoAlertType),
+          targetPrice: alsoTarget,
+        );
+      }
+
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('Submitted ($side). Order ID: $orderId')));
+      Navigator.pop(context);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Order failed: $e')));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
-  Future<void> _createStandaloneAlert() async {
+  Future<void> _createAlertOnly() async {
     final messenger = ScaffoldMessenger.of(context);
 
     final target = double.tryParse(_alertTarget.text.trim());
@@ -151,71 +197,9 @@ class _MarketActionSheetState extends State<MarketActionSheet>
         condition: _conditionForType(_alertType),
         targetPrice: target,
       );
-      if (!mounted) return;
       messenger.showSnackBar(const SnackBar(content: Text('Alert created')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Failed to create alert: $e')));
-    }
-  }
-
-  Future<void> _submitOrder(String side) async {
-    final messenger = ScaffoldMessenger.of(context);
-
-    if (_quantity <= 0) {
-      messenger.showSnackBar(const SnackBar(content: Text('Enter a valid quantity')));
-      return;
-    }
-
-    if (_broker == null) {
-      await _pickBroker();
-      if (_broker == null) {
-        messenger.showSnackBar(const SnackBar(content: Text('Please select a broker')));
-        return;
-      }
-    }
-
-    // If also creating an alert with the order:
-    double? alsoTarget;
-    if (_alsoCreateAlert) {
-      alsoTarget = double.tryParse(_alsoAlertTarget.text.trim());
-      if (alsoTarget == null || alsoTarget <= 0) {
-        messenger.showSnackBar(const SnackBar(content: Text('Enter a valid alert target price')));
-        return;
-      }
-      final allowed = await _ensureAlertAllowed();
-      if (!allowed) return;
-    }
-
-    setState(() => _submitting = true);
-
-    try {
-      final orderId = await _orders.createMarketRequestOrder(
-        stock: widget.stock,
-        broker: _broker!,
-        side: side,
-        quantity: _quantity,
-        investorNote: _note.text.trim().isEmpty ? null : _note.text.trim(),
-      );
-
-      // Create alert if requested
-      if (_alsoCreateAlert && alsoTarget != null) {
-        await _alerts.createAlert(
-          stockSymbol: widget.stock.symbol,
-          alertType: _alsoAlertType,
-          condition: _conditionForType(_alsoAlertType),
-          targetPrice: alsoTarget,
-        );
-      }
-
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('Submitted $side request (Order ID: $orderId)')),
-      );
-      Navigator.pop(context);
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Order failed: $e')));
-    } finally {
-      if (mounted) setState(() => _submitting = false);
     }
   }
 
@@ -223,103 +207,69 @@ class _MarketActionSheetState extends State<MarketActionSheet>
   Widget build(BuildContext context) {
     final stock = widget.stock;
 
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.transparent,
-      ),
-      child: DraggableScrollableSheet(
-        initialChildSize: 0.86,
-        minChildSize: 0.45,
-        maxChildSize: 0.96,
-        builder: (context, scrollController) {
-          return Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-            ),
-            child: Column(
-              children: [
-                const SizedBox(height: 10),
-                Container(
-                  width: 44,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
+    return DraggableScrollableSheet(
+      initialChildSize: 0.88,
+      minChildSize: 0.50,
+      maxChildSize: 0.96,
+      builder: (context, sc) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 44,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
                 ),
-                const SizedBox(height: 12),
-
-                // Header card
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('${stock.symbol} • MWK ${stock.price.toStringAsFixed(2)}',
-                                    style: Theme.of(context).textTheme.titleMedium),
-                                const SizedBox(height: 4),
-                                Text(stock.companyName,
-                                    style: Theme.of(context).textTheme.bodyMedium),
-                              ],
-                            ),
+              ),
+              const SizedBox(height: 10),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${stock.symbol} • MWK ${stock.price.toStringAsFixed(2)}',
+                            style: Theme.of(context).textTheme.titleMedium,
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: (stock.changePercent >= 0
-                                      ? AppTheme.gainColor
-                                      : AppTheme.lossColor)
-                                  .withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              '${stock.changePercent >= 0 ? '+' : ''}${stock.changePercent.toStringAsFixed(2)}%',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                color: stock.changePercent >= 0
-                                    ? AppTheme.gainColor
-                                    : AppTheme.lossColor,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                        Text('${stock.changePercent >= 0 ? '+' : ''}${stock.changePercent.toStringAsFixed(2)}%'),
+                      ],
                     ),
                   ),
                 ),
-
-                const SizedBox(height: 6),
-                TabBar(
+              ),
+              TabBar(
+                controller: _tabs,
+                tabs: const [
+                  Tab(text: 'Buy'),
+                  Tab(text: 'Sell'),
+                  Tab(text: 'Alert'),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
                   controller: _tabs,
-                  tabs: const [
-                    Tab(text: 'Buy'),
-                    Tab(text: 'Sell'),
-                    Tab(text: 'Alert'),
+                  children: [
+                    _orderTab(sc, side: 'buy'),
+                    _orderTab(sc, side: 'sell'),
+                    _alertTab(sc),
                   ],
                 ),
-
-                Expanded(
-                  child: TabBarView(
-                    controller: _tabs,
-                    children: [
-                      _orderTab(scrollController, side: 'buy'),
-                      _orderTab(scrollController, side: 'sell'),
-                      _alertTab(scrollController),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -336,45 +286,34 @@ class _MarketActionSheetState extends State<MarketActionSheet>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  isBuy ? 'Buy request' : 'Sell request',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'This app does not execute trades or hold funds. Your request is routed to a licensed broker.',
-                ),
-                const SizedBox(height: 14),
+                Text(isBuy ? 'Buy request' : 'Sell request',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 12),
                 TextField(
                   controller: _qty,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Quantity (shares)',
-                    hintText: 'e.g. 100',
-                  ),
-                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(labelText: 'Quantity (shares)'),
                 ),
                 const SizedBox(height: 12),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(_broker?.name ?? 'Select broker'),
-                  subtitle: Text(
-                    _broker == null
-                        ? 'Choose broker to route request'
-                        : 'Fee rate: ${(_feeRate * 100).toStringAsFixed(2)}%',
+                DropdownButtonFormField<BrokerModel>(
+                  initialValue: _broker,
+                  items: _brokers
+                      .map((b) => DropdownMenuItem(value: b, child: Text(b.name)))
+                      .toList(),
+                  onChanged: _brokersLoading ? null : (b) => setState(() => _broker = b),
+                  decoration: InputDecoration(
+                    labelText: _brokersLoading ? 'Loading brokers...' : 'Broker',
                   ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _pickBroker,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 TextField(
                   controller: _note,
                   maxLines: 2,
                   decoration: InputDecoration(
                     labelText: 'Instruction to broker (optional)',
                     hintText: isBuy
-                        ? 'e.g. Buy if price <= MWK 100.00'
-                        : 'e.g. Sell if price >= MWK 150.00',
+                        ? 'e.g. Buy if price ≤ MWK 100'
+                        : 'e.g. Sell if price ≥ MWK 150',
                   ),
                 ),
               ],
@@ -382,7 +321,6 @@ class _MarketActionSheetState extends State<MarketActionSheet>
           ),
         ),
         const SizedBox(height: 12),
-
         Card(
           child: Padding(
             padding: const EdgeInsets.all(14),
@@ -400,28 +338,24 @@ class _MarketActionSheetState extends State<MarketActionSheet>
             ),
           ),
         ),
-
         const SizedBox(height: 12),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   value: _alsoCreateAlert,
                   onChanged: (v) => setState(() => _alsoCreateAlert = v),
                   title: const Text('Also create a price alert'),
-                  subtitle: const Text('Get notified when price hits your target'),
                 ),
                 if (_alsoCreateAlert) ...[
-                  const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
                     initialValue: _alsoAlertType,
                     items: const [
-                      DropdownMenuItem(value: 'buy', child: Text('Buy alert (price <= target)')),
-                      DropdownMenuItem(value: 'sell', child: Text('Sell alert (price >= target)')),
+                      DropdownMenuItem(value: 'buy', child: Text('Buy alert (price ≤ target)')),
+                      DropdownMenuItem(value: 'sell', child: Text('Sell alert (price ≥ target)')),
                     ],
                     onChanged: (v) => setState(() => _alsoAlertType = v ?? 'buy'),
                     decoration: const InputDecoration(labelText: 'Alert type'),
@@ -430,28 +364,20 @@ class _MarketActionSheetState extends State<MarketActionSheet>
                   TextField(
                     controller: _alsoAlertTarget,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Alert target price (MWK)',
-                      hintText: 'e.g. 100.00',
-                    ),
+                    decoration: const InputDecoration(labelText: 'Alert target price (MWK)'),
                   ),
                 ],
               ],
             ),
           ),
         ),
-
         const SizedBox(height: 14),
         SizedBox(
           height: 54,
           child: ElevatedButton(
             onPressed: _submitting ? null : () => _submitOrder(side),
             child: _submitting
-                ? const SizedBox(
-                    height: 22,
-                    width: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
+                ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2))
                 : Text(isBuy ? 'Submit Buy Request' : 'Submit Sell Request'),
           ),
         ),
@@ -471,14 +397,12 @@ class _MarketActionSheetState extends State<MarketActionSheet>
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text('Price alert', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                const Text('Alerts are informational only and do not execute trades.'),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: _alertType,
                   items: const [
-                    DropdownMenuItem(value: 'buy', child: Text('Buy alert (price <= target)')),
-                    DropdownMenuItem(value: 'sell', child: Text('Sell alert (price >= target)')),
+                    DropdownMenuItem(value: 'buy', child: Text('Buy alert (price ≤ target)')),
+                    DropdownMenuItem(value: 'sell', child: Text('Sell alert (price ≥ target)')),
                   ],
                   onChanged: (v) => setState(() => _alertType = v ?? 'buy'),
                   decoration: const InputDecoration(labelText: 'Alert type'),
@@ -487,16 +411,13 @@ class _MarketActionSheetState extends State<MarketActionSheet>
                 TextField(
                   controller: _alertTarget,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Target price (MWK)',
-                    hintText: 'e.g. 100.00',
-                  ),
+                  decoration: const InputDecoration(labelText: 'Target price (MWK)'),
                 ),
                 const SizedBox(height: 14),
                 SizedBox(
                   height: 52,
                   child: ElevatedButton(
-                    onPressed: _createStandaloneAlert,
+                    onPressed: _createAlertOnly,
                     child: const Text('Create alert'),
                   ),
                 ),
@@ -512,10 +433,7 @@ class _MarketActionSheetState extends State<MarketActionSheet>
     final style = bold ? Theme.of(context).textTheme.titleMedium : null;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(left),
-        Text(right, style: style),
-      ],
+      children: [Text(left), Text(right, style: style)],
     );
   }
 }
