@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:mse_market_connect/core/services/auth_service.dart';
+import 'package:mse_market_connect/core/services/broker_user_service.dart';
 import 'package:mse_market_connect/core/services/profile_service.dart';
 import 'package:mse_market_connect/core/theme/app_theme.dart';
 import 'package:mse_market_connect/features/admin/presentation/admin_dashboard_screen.dart';
+import 'package:mse_market_connect/features/brokers/presentation/broker_dashboard_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/my_alerts_screen.dart';
 import 'package:mse_market_connect/features/notifications/presentation/notifications_screen.dart';
 import 'package:mse_market_connect/shared/models/profile_model.dart';
@@ -17,18 +19,30 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final authService = AuthService();
   final profileService = ProfileService();
+  final brokerUserService = BrokerUserService();
 
-  late Future<ProfileModel?> _future;
+  late Future<_ProfileAndBroker> _future;
 
   @override
   void initState() {
     super.initState();
-    _future = profileService.getCurrentProfile();
+    _future = _load();
+  }
+
+  Future<_ProfileAndBroker> _load() async {
+    final profile = await profileService.getCurrentProfile();
+    Map<String, dynamic>? brokerRow;
+    try {
+      brokerRow = await brokerUserService.getMyBrokerUserRow();
+    } catch (_) {
+      brokerRow = null;
+    }
+    return _ProfileAndBroker(profile: profile, brokerRow: brokerRow);
   }
 
   Future<void> _reload() async {
     setState(() {
-      _future = profileService.getCurrentProfile();
+      _future = _load();
     });
     await _future;
   }
@@ -39,10 +53,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(title: const Text('Profile')),
       body: RefreshIndicator(
         onRefresh: _reload,
-        child: FutureBuilder<ProfileModel?>(
+        child: FutureBuilder<_ProfileAndBroker>(
           future: _future,
           builder: (context, snapshot) {
-            // Loading
             if (snapshot.connectionState == ConnectionState.waiting) {
               return ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -54,7 +67,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               );
             }
 
-            // Error (don’t default to investor silently)
             if (snapshot.hasError) {
               return ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -76,13 +88,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
               );
             }
 
-            final profile = snapshot.data;
+            final data = snapshot.data!;
+            final profile = data.profile;
+            final brokerRow = data.brokerRow;
+
             final email = profile?.email ?? authService.currentUser?.email ?? 'User';
             final fullName = profile?.fullName ?? 'No name added';
             final role = profile?.role ?? 'investor';
             final kycStatus = profile?.kycStatus ?? 'pending';
 
             final isAdmin = role == 'admin';
+            final isApprovedBroker = brokerRow?['is_approved'] == true;
 
             return Padding(
               padding: const EdgeInsets.all(16),
@@ -145,7 +161,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: ListTile(
                             leading: const Icon(Icons.track_changes_outlined),
                             title: const Text('Watch'),
-                            subtitle: const Text('Price alerts and targets'),
+                            subtitle: const Text('Price targets & alerts'),
                             trailing: const Icon(Icons.chevron_right),
                             onTap: () => Navigator.of(context).push(
                               MaterialPageRoute(builder: (_) => const MyAlertsScreen()),
@@ -153,11 +169,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
+
+                        // Broker dashboard (admin OR approved broker)
+                        if (isAdmin || isApprovedBroker) ...[
+                          Card(
+                            child: ListTile(
+                              leading: const Icon(Icons.business_center_outlined),
+                              title: const Text('Broker Dashboard'),
+                              subtitle: Text(isAdmin
+                                  ? 'Admin view of broker inbox'
+                                  : 'Manage incoming client requests'),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => const BrokerDashboardScreen()),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+
+                        // Admin dashboard (admin only)
                         if (isAdmin) ...[
                           Card(
                             child: ListTile(
                               leading: const Icon(Icons.admin_panel_settings_outlined),
                               title: const Text('Admin Dashboard'),
+                              subtitle: const Text('Ads, premium requests, approvals'),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: () => Navigator.of(context).push(
                                 MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
@@ -193,6 +230,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+}
+
+class _ProfileAndBroker {
+  final ProfileModel? profile;
+  final Map<String, dynamic>? brokerRow;
+  const _ProfileAndBroker({required this.profile, required this.brokerRow});
 }
 
 class _InfoChip extends StatelessWidget {

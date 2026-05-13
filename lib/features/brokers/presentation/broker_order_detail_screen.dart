@@ -12,20 +12,8 @@ class BrokerOrderDetailScreen extends StatefulWidget {
 class _BrokerOrderDetailScreenState extends State<BrokerOrderDetailScreen> {
   Map<String, dynamic>? _order;
   bool _loading = true;
-  bool _saving = false;
-
   String? _status;
   final _note = TextEditingController();
-
-  static const statuses = [
-    'submitted',
-    'received',
-    'approved',
-    'rejected',
-    'executed',
-    'settled',
-    'cancelled',
-  ];
 
   @override
   void initState() {
@@ -33,123 +21,77 @@ class _BrokerOrderDetailScreenState extends State<BrokerOrderDetailScreen> {
     _load();
   }
 
-  @override
-  void dispose() {
-    _note.dispose();
-    super.dispose();
-  }
-
   Future<void> _load() async {
-    setState(() => _loading = true);
     final row = await Supabase.instance.client
         .from('trade_orders')
-        .select('id, stock_symbol, side, quantity, status, investor_note, broker_note, created_at, updated_at, total_estimate')
+        .select('*, profiles!user_id(email, full_name, phone)')
         .eq('id', widget.orderId)
         .maybeSingle();
 
-    if (!mounted) return;
-    setState(() {
-      _order = row as Map<String, dynamic>?;
-      _status = _order?['status'] as String?;
-      _note.text = (_order?['broker_note'] as String?) ?? '';
-      _loading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _order = row;
+        _status = _order?['status'];
+        _note.text = _order?['broker_note'] ?? '';
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _save() async {
-    if (_order == null) return;
-    setState(() => _saving = true);
-
-    try {
-      await Supabase.instance.client
-          .from('trade_orders')
-          .update({
-            'status': _status,
-            'broker_note': _note.text.trim().isEmpty ? null : _note.text.trim(),
-          })
-          .eq('id', widget.orderId);
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Updated')),
-      );
-      await _load();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Update failed: $e')),
-      );
-    } finally {
-      if (mounted) setState(() => _saving = false);
+    await Supabase.instance.client.from('trade_orders').update({
+      'status': _status,
+      'broker_note': _note.text,
+    }).eq('id', widget.orderId);
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Order Updated & User Notified')));
+      Navigator.pop(context);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    
+    final profile = _order?['profiles'] as Map<String, dynamic>?;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Order (Broker)')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : (_order == null)
-              ? const Center(child: Text('Order not found'))
-              : ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Text(
-                          '${_order!['stock_symbol']} • ${(_order!['side'] as String).toUpperCase()}\n'
-                          'Qty: ${_order!['quantity']}\n'
-                          'Status: ${_order!['status']}\n'
-                          'Total: ${_order!['total_estimate'] ?? '—'}',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          children: [
-                            DropdownButtonFormField<String>(
-                              initialValue: _status,
-                              items: statuses
-                                  .map((s) => DropdownMenuItem(value: s, child: Text(s.toUpperCase())))
-                                  .toList(),
-                              onChanged: (v) => setState(() => _status = v),
-                              decoration: const InputDecoration(labelText: 'Update status'),
-                            ),
-                            const SizedBox(height: 12),
-                            TextField(
-                              controller: _note,
-                              maxLines: 3,
-                              decoration: const InputDecoration(
-                                labelText: 'Broker note (optional)',
-                                hintText: 'Reason for rejection / execution notes',
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            SizedBox(
-                              width: double.infinity,
-                              height: 52,
-                              child: ElevatedButton(
-                                onPressed: _saving ? null : _save,
-                                child: _saving
-                                    ? const SizedBox(
-                                        height: 22,
-                                        width: 22,
-                                        child: CircularProgressIndicator(strokeWidth: 2),
-                                      )
-                                    : const Text('Save'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+      appBar: AppBar(title: const Text('Review Order')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            color: Colors.blue.shade50,
+            child: ListTile(
+              title: const Text('SENDER DETAILS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              subtitle: Text('Name: ${profile?['full_name'] ?? 'Not set'}\nEmail: ${profile?['email']}\nPhone: ${profile?['phone'] ?? 'Not provided'}\nUser ID: ${_order?['user_id']}'),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text('Order: ${_order?['stock_symbol']} ${_order?['side']?.toString().toUpperCase()}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Text('Quantity: ${_order?['quantity']}'),
+          const Divider(),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            initialValue: _status,
+            items: ['submitted', 'received', 'approved', 'rejected', 'executed', 'settled']
+                .map((s) => DropdownMenuItem(value: s, child: Text(s.toUpperCase()))).toList(),
+            onChanged: (v) => setState(() => _status = v),
+            decoration: const InputDecoration(labelText: 'Set Status'),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _note,
+            decoration: const InputDecoration(labelText: 'Response / Note to User', hintText: 'Example: Payment not seen'),
+            maxLines: 3,
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton(onPressed: _save, child: const Text('SAVE & NOTIFY USER')),
+        ],
+      ),
     );
   }
 }
