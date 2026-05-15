@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:mse_market_connect/features/auth/presentation/login_screen.dart';
 import 'package:mse_market_connect/shared/widgets/main_nav_shell.dart';
+import 'package:mse_market_connect/core/services/fcm_service.dart';
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
@@ -14,6 +15,8 @@ class AuthGate extends StatelessWidget {
         final session = Supabase.instance.client.auth.currentSession;
 
         if (session != null) {
+          // Register device for push notifications
+          FCMService().initNotifications();
           return const MainNavShell();
         }
 

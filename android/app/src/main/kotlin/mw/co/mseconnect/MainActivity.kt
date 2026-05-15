@@ -1,4 +1,4 @@
-package com.example.mse_market_connect
+package mw.co.mseconnect
 
 import io.flutter.embedding.android.FlutterActivity
 
