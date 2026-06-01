@@ -40,8 +40,8 @@ class HomeScreen extends StatelessWidget {
         ).push(MaterialPageRoute(builder: (_) => const MyOrdersScreen())),
       ),
       _QuickActionData(
-        icon: Icons.track_changes_rounded,
-        label: 'Watch',
+        icon: Icons.star_rounded,
+        label: 'Watchlist',
         gradient: const LinearGradient(
           colors: [Color(0xFFF9A825), Color(0xFFFFB300)],
         ),
@@ -116,19 +116,12 @@ class HomeScreen extends StatelessWidget {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 12),
-            GridView.builder(
-              itemCount: actions.length,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 1.25,
-              ),
-              itemBuilder: (context, index) =>
-                  _QuickAction3DCard(item: actions[index]),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: actions.map((a) => _QuickActionChip(item: a)).toList(),
             ),
+            const SizedBox(height: 6),
           ],
         ),
       ),
@@ -151,7 +144,7 @@ class _NewsTicker extends StatelessWidget {
         return Container(
           height: 40,
           decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withValues(alpha: 0.05),
+            color: AppTheme.primaryColor.withOpacity(0.05),
             borderRadius: BorderRadius.circular(8),
           ),
           child: ListView(
@@ -271,56 +264,43 @@ class _QuickActionData {
   });
 }
 
-class _QuickAction3DCard extends StatefulWidget {
+class _QuickActionChip extends StatelessWidget {
   final _QuickActionData item;
-  const _QuickAction3DCard({required this.item});
-
-  @override
-  State<_QuickAction3DCard> createState() => _QuickAction3DCardState();
-}
-
-class _QuickAction3DCardState extends State<_QuickAction3DCard> {
-  bool _pressed = false;
+  const _QuickActionChip({required this.item});
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTapCancel: () => setState(() => _pressed = false),
-      onTap: widget.item.onTap,
-      child: AnimatedScale(
-        scale: _pressed ? 0.95 : 1.0,
-        duration: const Duration(milliseconds: 100),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            color: Colors.white,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 5),
-              ),
-            ],
-            border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+    final scheme = Theme.of(context).colorScheme;
+
+    return Material(
+      color: scheme.surface,
+      elevation: 0,
+      shape: StadiumBorder(
+        side: BorderSide(color: Colors.black.withOpacity(0.06)),
+      ),
+      child: InkWell(
+        onTap: item.onTap,
+        customBorder: const StadiumBorder(),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                height: 50,
-                width: 50,
+                height: 28,
+                width: 28,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(15),
-                  gradient: widget.item.gradient,
+                  gradient: item.gradient,
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(widget.item.icon, color: Colors.white, size: 28),
+                child: Icon(item.icon, color: Colors.white, size: 16),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(width: 10),
               Text(
-                widget.item.label,
-                style: const TextStyle(fontWeight: FontWeight.bold),
+                item.label,
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
               ),
             ],
           ),
