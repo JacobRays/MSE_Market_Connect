@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mse_market_connect/features/home/presentation/home_screen.dart';
-import 'package:mse_market_connect/features/learning/presentation/learning_screen.dart';
+import 'package:mse_market_connect/features/news/presentation/news_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/market_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/my_alerts_screen.dart';
 import 'package:mse_market_connect/features/portfolio/presentation/portfolio_screen.dart';
@@ -19,9 +19,9 @@ class _MainNavShellState extends State<MainNavShell> {
   final List<Widget> _screens = const [
     HomeScreen(),
     MarketScreen(),
-    MyAlertsScreen(),      // Watch tab
+    MyAlertsScreen(),
     PortfolioScreen(),
-    LearningScreen(),
+    NewsScreen(), // Replaced Learning with News
     ProfileScreen(),
   ];
 
@@ -45,8 +45,8 @@ class _MainNavShellState extends State<MainNavShell> {
             label: 'Market',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.notifications_active_outlined),
-            activeIcon: Icon(Icons.notifications_active),
+            icon: Icon(Icons.track_changes_outlined),
+            activeIcon: Icon(Icons.track_changes),
             label: 'Watch',
           ),
           BottomNavigationBarItem(
@@ -55,9 +55,9 @@ class _MainNavShellState extends State<MainNavShell> {
             label: 'Portfolio',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.school_outlined),
-            activeIcon: Icon(Icons.school),
-            label: 'Learn',
+            icon: Icon(Icons.newspaper_outlined), // Professional News Icon
+            activeIcon: Icon(Icons.newspaper),
+            label: 'News',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:mse_market_connect/core/services/support_service.dart';
-import 'package:mse_market_connect/core/theme/app_theme.dart';
 
 class SupportScreen extends StatefulWidget {
   const SupportScreen({super.key});

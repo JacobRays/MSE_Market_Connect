@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:mse_market_connect/core/services/ad_service.dart';
+import 'package:mse_market_connect/core/services/news_service.dart';
 import 'package:mse_market_connect/core/theme/app_theme.dart';
 import 'package:mse_market_connect/features/learning/presentation/learning_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/market_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/my_alerts_screen.dart';
-import 'package:mse_market_connect/features/profile/presentation/upgrade_screen.dart';
 import 'package:mse_market_connect/features/trade/presentation/my_orders_screen.dart';
 import 'package:mse_market_connect/shared/models/ad_model.dart';
+import 'package:mse_market_connect/shared/models/news_model.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -19,48 +20,40 @@ class HomeScreen extends StatelessWidget {
         label: 'Market',
         gradient: const LinearGradient(
           colors: [Color(0xFF0D47A1), Color(0xFF1976D2)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
         ),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const MarketScreen()),
-        ),
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const MarketScreen())),
       ),
       _QuickActionData(
         icon: Icons.receipt_long_rounded,
         label: 'My Orders',
         gradient: const LinearGradient(
           colors: [Color(0xFF6A1B9A), Color(0xFF8E24AA)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
         ),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const MyOrdersScreen()),
-        ),
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const MyOrdersScreen())),
       ),
       _QuickActionData(
         icon: Icons.track_changes_rounded,
         label: 'Watch',
         gradient: const LinearGradient(
           colors: [Color(0xFFF9A825), Color(0xFFFFB300)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
         ),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const MyAlertsScreen()),
-        ),
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const MyAlertsScreen())),
       ),
       _QuickActionData(
         icon: Icons.school_rounded,
         label: 'Learn',
         gradient: const LinearGradient(
           colors: [Color(0xFF00695C), Color(0xFF00897B)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
         ),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const LearningScreen()),
-        ),
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const LearningScreen())),
       ),
     ];
 
@@ -70,75 +63,15 @@ class HomeScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Text('Welcome back', style: Theme.of(context).textTheme.headlineMedium),
-            const SizedBox(height: 8),
-            Text(
-              'Track MSE prices, set targets, and submit broker-routed orders.',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
+            const _NewsTicker(),
             const SizedBox(height: 14),
-
-            // Premium card on home page
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      height: 48,
-                      width: 48,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [AppTheme.secondaryColor, Color(0xFFFFD54F)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(Icons.workspace_premium, color: Colors.white),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Upgrade to Premium',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'MWK 50,000/month • Unlimited watched companies & alerts',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                          const SizedBox(height: 10),
-                          SizedBox(
-                            height: 44,
-                            child: ElevatedButton(
-                              onPressed: () => Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => const UpgradeScreen()),
-                              ),
-                              child: const Text('Upgrade'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 14),
-
-            // Bigger advertising panel
             const _AdPanel(),
-
             const SizedBox(height: 16),
-            Text('Quick Actions', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Quick Actions',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 12),
-
             GridView.builder(
               itemCount: actions.length,
               shrinkWrap: true,
@@ -147,13 +80,55 @@ class HomeScreen extends StatelessWidget {
                 crossAxisCount: 2,
                 mainAxisSpacing: 12,
                 crossAxisSpacing: 12,
-                childAspectRatio: 1.25, // less tall
+                childAspectRatio: 1.25,
               ),
-              itemBuilder: (context, index) => _QuickAction3DCard(item: actions[index]),
+              itemBuilder: (context, index) =>
+                  _QuickAction3DCard(item: actions[index]),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _NewsTicker extends StatelessWidget {
+  const _NewsTicker();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<NewsModel>>(
+      future: NewsService().getLatestNews(),
+      builder: (context, snapshot) {
+        String text = "Welcome to MSE Market Connect. Stay tuned for updates.";
+        if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+          text = snapshot.data!.map((n) => "• ${n.title}").join("   ");
+        }
+        return Container(
+          height: 40,
+          decoration: BoxDecoration(
+            color: AppTheme.primaryColor.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  text,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -163,34 +138,26 @@ class _AdPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final service = AdService();
-
     return FutureBuilder<List<AdModel>>(
-      future: service.getActiveAds(limit: 5),
+      future: AdService().getActiveAds(limit: 5),
       builder: (context, snapshot) {
         final ads = snapshot.data ?? [];
-
         if (ads.isEmpty) {
           return const _AdCard(
-            title: 'Advertise here',
-            subtitle: 'Promote your brand to MSE retail investors',
+            title: 'Advertise Here',
+            subtitle: 'Reach all MSE investors',
             imageUrl: null,
           );
         }
-
         return SizedBox(
-          height: 190, // bigger panel
+          height: 180,
           child: PageView.builder(
-            controller: PageController(viewportFraction: 1.0),
             itemCount: ads.length,
-            itemBuilder: (context, index) {
-              final ad = ads[index];
-              return _AdCard(
-                title: ad.title,
-                subtitle: ad.subtitle ?? 'Sponsored',
-                imageUrl: ad.imageUrl,
-              );
-            },
+            itemBuilder: (context, index) => _AdCard(
+              title: ads[index].title,
+              subtitle: ads[index].subtitle ?? 'Sponsored',
+              imageUrl: ads[index].imageUrl,
+            ),
           ),
         );
       },
@@ -202,70 +169,46 @@ class _AdCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final String? imageUrl;
-
-  const _AdCard({
-    required this.title,
-    required this.subtitle,
-    required this.imageUrl,
-  });
+  const _AdCard({required this.title, required this.subtitle, this.imageUrl});
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: (imageUrl != null && imageUrl!.trim().isNotEmpty)
-                  ? Image.network(
-                      imageUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: AppTheme.primaryColor.withValues(alpha: 0.10),
-                      ),
-                    )
-                  : Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            AppTheme.primaryColor.withValues(alpha: 0.95),
-                            AppTheme.primaryColor.withValues(alpha: 0.60),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                    ),
-            ),
-            Positioned.fill(child: Container(color: Colors.black.withValues(alpha: 0.18))),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
-                    ),
+      elevation: 0,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: (imageUrl != null && imageUrl!.isNotEmpty)
+                ? Image.network(
+                    imageUrl!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (c, e, s) =>
+                        Container(color: AppTheme.primaryColor),
+                  )
+                : Container(color: AppTheme.primaryColor),
+          ),
+          Container(color: Colors.black38),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-                ],
-              ),
+                ),
+                Text(subtitle, style: const TextStyle(color: Colors.white70)),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -276,8 +219,7 @@ class _QuickActionData {
   final String label;
   final Gradient gradient;
   final VoidCallback onTap;
-
-  const _QuickActionData({
+  _QuickActionData({
     required this.icon,
     required this.label,
     required this.gradient,
@@ -288,71 +230,53 @@ class _QuickActionData {
 class _QuickAction3DCard extends StatefulWidget {
   final _QuickActionData item;
   const _QuickAction3DCard({required this.item});
-
   @override
   State<_QuickAction3DCard> createState() => _QuickAction3DCardState();
 }
 
 class _QuickAction3DCardState extends State<_QuickAction3DCard> {
   bool _pressed = false;
-
   @override
   Widget build(BuildContext context) {
-    return AnimatedScale(
-      scale: _pressed ? 0.985 : 1.0,
-      duration: const Duration(milliseconds: 110),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(18),
-          onTap: widget.item.onTap,
-          onHighlightChanged: (v) => setState(() => _pressed = v),
-          child: Ink(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              gradient: const LinearGradient(
-                colors: [Color(0xFFFFFFFF), Color(0xFFF3F6FB)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTap: widget.item.onTap,
+      child: AnimatedScale(
+        scale: _pressed ? 0.95 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 5),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.10),
-                  blurRadius: 16,
-                  offset: const Offset(0, 10),
+            ],
+            border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                height: 50,
+                width: 50,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(15),
+                  gradient: widget.item.gradient,
                 ),
-              ],
-              border: Border.all(color: const Color(0xFFE6EDF7)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(12), // less padding
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Bigger 3D icon bubble
-                  Container(
-                    height: 58,
-                    width: 58,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      gradient: widget.item.gradient,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.20),
-                          blurRadius: 14,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: Icon(widget.item.icon, color: Colors.white, size: 32),
-                  ),
-                  const Spacer(),
-                  Text(widget.item.label, style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 2),
-                  Text('Open', style: Theme.of(context).textTheme.bodyMedium),
-                ],
+                child: Icon(widget.item.icon, color: Colors.white, size: 28),
               ),
-            ),
+              const SizedBox(height: 10),
+              Text(
+                widget.item.label,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
           ),
         ),
       ),

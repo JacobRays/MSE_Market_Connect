@@ -1,0 +1,124 @@
+diff --git a/lib/main.dart b/lib/main.dart
+index 3178a4a..b6f24a6 100644
+--- a/lib/main.dart
++++ b/lib/main.dart
+@@ -1,4 +1,5 @@
+ import 'package:flutter/material.dart';
++import 'package:flutter/foundation.dart';
+ import 'package:supabase_flutter/supabase_flutter.dart';
+ import 'app/app.dart';
+ import 'core/constants/supabase_config.dart';
+@@ -15,8 +16,9 @@ Future<void> main() async {
+       url: SupabaseConfig.supabaseUrl,
+       anonKey: SupabaseConfig.supabaseAnonKey,
+     );
+-  } catch (e) {
+-    print("Supabase Init Error: $e");
++  } catch (e, st) {
++    debugPrint("Supabase Init Error: $e");
++    debugPrint("$st");
+   }
+ 
+   runApp(const MseMarketConnectApp());
+diff --git a/lib/features/auth/presentation/auth_gate.dart b/lib/features/auth/presentation/auth_gate.dart
+index 8cb6785..a0bf3b7 100644
+--- a/lib/features/auth/presentation/auth_gate.dart
++++ b/lib/features/auth/presentation/auth_gate.dart
+@@ -1,18 +1,23 @@
+ import 'package:flutter/material.dart';
+ import 'package:supabase_flutter/supabase_flutter.dart';
+ import 'package:mse_market_connect/features/auth/presentation/login_screen.dart';
+ import 'package:mse_market_connect/shared/widgets/main_nav_shell.dart';
+-import 'package:mse_market_connect/core/services/fcm_service.dart';
+ 
+ class AuthGate extends StatelessWidget {
+   const AuthGate({super.key});
+ 
+   @override
+   Widget build(BuildContext context) {
+     return StreamBuilder<AuthState>(
+       stream: Supabase.instance.client.auth.onAuthStateChange,
+       builder: (context, snapshot) {
++        if (snapshot.connectionState == ConnectionState.waiting) {
++          return const Scaffold(
++            body: Center(child: CircularProgressIndicator()),
++          );
++        }
++
+         final session = Supabase.instance.client.auth.currentSession;
+ 
+         if (session != null) {
+-          // Register device for push notifications
+-          FCMService().initNotifications();
+           return const MainNavShell();
+         }
+ 
+         return const LoginScreen();
+       },
+     );
+   }
+ }
+diff --git a/lib/shared/widgets/main_nav_shell.dart b/lib/shared/widgets/main_nav_shell.dart
+index b0048fe..111e725 100644
+--- a/lib/shared/widgets/main_nav_shell.dart
++++ b/lib/shared/widgets/main_nav_shell.dart
+@@ -1,4 +1,6 @@
++import 'package:flutter/foundation.dart';
+ import 'package:flutter/material.dart';
++import 'package:mse_market_connect/core/services/fcm_service.dart';
+ import 'package:mse_market_connect/features/home/presentation/home_screen.dart';
+ import 'package:mse_market_connect/features/news/presentation/news_screen.dart';
+ import 'package:mse_market_connect/features/market/presentation/market_screen.dart';
+ import 'package:mse_market_connect/features/market/presentation/my_alerts_screen.dart';
+ import 'package:mse_market_connect/features/portfolio/presentation/portfolio_screen.dart';
+ import 'package:mse_market_connect/features/profile/presentation/profile_screen.dart';
+@@ -13,6 +15,17 @@ class MainNavShell extends StatefulWidget {
+ }
+ 
+ class _MainNavShellState extends State<MainNavShell> {
+   int _currentIndex = 0;
+ 
++  @override
++  void initState() {
++    super.initState();
++    // Push notifications should not run on Web, and should not be called in build().
++    if (!kIsWeb) {
++      try {
++        FCMService().initNotifications();
++      } catch (e, st) {
++        debugPrint('FCM init failed: $e\n$st');
++      }
++    }
++  }
++
+   final List<Widget> _screens = const [
+     HomeScreen(),
+     MarketScreen(),
+     MyAlertsScreen(),
+     PortfolioScreen(),
+diff --git a/lib/features/home/presentation/home_screen.dart b/lib/features/home/presentation/home_screen.dart
+index 6c3b114..b612c80 100644
+--- a/lib/features/home/presentation/home_screen.dart
++++ b/lib/features/home/presentation/home_screen.dart
+@@ -86,7 +86,7 @@ class _NewsTicker extends StatelessWidget {
+         return Container(
+           height: 40,
+           decoration: BoxDecoration(
+-            color: AppTheme.primaryColor.withValues(alpha: 0.05),
++            color: AppTheme.primaryColor.withOpacity(0.05),
+             borderRadius: BorderRadius.circular(8),
+           ),
+           child: ListView(
+@@ -218,10 +218,10 @@ class _QuickAction3DCardState extends State<_QuickAction3DCard> {
+           decoration: BoxDecoration(
+             borderRadius: BorderRadius.circular(18),
+             color: Colors.white,
+             boxShadow: [
+-              BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 5))
++              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))
+             ],
+-            border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
++            border: Border.all(color: Colors.black.withOpacity(0.05)),
+           ),
+           child: Column(
+             mainAxisAlignment: MainAxisAlignment.center,
