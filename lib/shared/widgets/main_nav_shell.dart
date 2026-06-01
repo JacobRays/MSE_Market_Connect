@@ -1,9 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:mse_market_connect/core/services/fcm_service.dart';
 import 'package:mse_market_connect/features/home/presentation/home_screen.dart';
-import 'package:mse_market_connect/features/news/presentation/news_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/market_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/my_alerts_screen.dart';
-import 'package:mse_market_connect/features/portfolio/presentation/portfolio_screen.dart';
 import 'package:mse_market_connect/features/profile/presentation/profile_screen.dart';
 
 class MainNavShell extends StatefulWidget {
@@ -19,11 +19,18 @@ class _MainNavShellState extends State<MainNavShell> {
   final List<Widget> _screens = const [
     HomeScreen(),
     MarketScreen(),
-    MyAlertsScreen(),
-    PortfolioScreen(),
-    NewsScreen(), // Replaced Learning with News
+    MyAlertsScreen(), // temporarily used as Watchlist/Watch screen
     ProfileScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Only initialize push notifications on mobile (not web).
+    if (!kIsWeb) {
+      FCMService().initNotifications();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,19 +52,9 @@ class _MainNavShellState extends State<MainNavShell> {
             label: 'Market',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.track_changes_outlined),
-            activeIcon: Icon(Icons.track_changes),
-            label: 'Watch',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.account_balance_wallet_outlined),
-            activeIcon: Icon(Icons.account_balance_wallet),
-            label: 'Portfolio',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.newspaper_outlined), // Professional News Icon
-            activeIcon: Icon(Icons.newspaper),
-            label: 'News',
+            icon: Icon(Icons.star_border_rounded),
+            activeIcon: Icon(Icons.star_rounded),
+            label: 'Watchlist',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
