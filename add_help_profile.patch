@@ -1,0 +1,57 @@
+diff --git a/lib/features/profile/presentation/profile_screen.dart b/lib/features/profile/presentation/profile_screen.dart
+index 6d2c3b1..a8c6b97 100644
+--- a/lib/features/profile/presentation/profile_screen.dart
++++ b/lib/features/profile/presentation/profile_screen.dart
+@@ -7,10 +7,12 @@ import 'package:mse_market_connect/core/services/profile_service.dart';
+ import 'package:mse_market_connect/core/theme/app_theme.dart';
+ import 'package:mse_market_connect/features/admin/presentation/admin_dashboard_screen.dart';
+ import 'package:mse_market_connect/features/brokers/presentation/broker_dashboard_screen.dart';
++import 'package:mse_market_connect/features/brokers/presentation/broker_list_screen.dart';
+ import 'package:mse_market_connect/features/market/presentation/my_alerts_screen.dart';
+ import 'package:mse_market_connect/features/notifications/presentation/notifications_screen.dart';
++import 'package:mse_market_connect/features/profile/presentation/support_screen.dart';
+ import 'package:mse_market_connect/shared/models/profile_model.dart';
+ 
+ class ProfileScreen extends StatefulWidget {
+@@ -170,6 +172,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
+                         ),
+                         const SizedBox(height: 12),
+ 
++                        // Help & Support
++                        Padding(
++                          padding: const EdgeInsets.only(left: 4, bottom: 8, top: 4),
++                          child: Text(
++                            'Help & Support',
++                            style: Theme.of(context).textTheme.titleMedium,
++                          ),
++                        ),
++                        Card(
++                          child: ListTile(
++                            leading: const Icon(Icons.support_agent_outlined),
++                            title: const Text('Support'),
++                            subtitle: const Text('FAQs and contact support'),
++                            trailing: const Icon(Icons.chevron_right),
++                            onTap: () => Navigator.of(context).push(
++                              MaterialPageRoute(builder: (_) => const SupportScreen()),
++                            ),
++                          ),
++                        ),
++                        const SizedBox(height: 12),
++                        Card(
++                          child: ListTile(
++                            leading: const Icon(Icons.business_center_outlined),
++                            title: const Text('Find a Broker'),
++                            subtitle: const Text('Licensed brokers and contact details'),
++                            trailing: const Icon(Icons.chevron_right),
++                            onTap: () => Navigator.of(context).push(
++                              MaterialPageRoute(builder: (_) => const BrokerListScreen()),
++                            ),
++                          ),
++                        ),
++                        const SizedBox(height: 12),
++
+                         // Broker dashboard (admin OR approved broker)
+                         if (isAdmin || isApprovedBroker) ...[
+                           Card(
+                             child: ListTile(
+                               leading: const Icon(Icons.business_center_outlined),

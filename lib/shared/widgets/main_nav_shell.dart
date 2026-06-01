@@ -19,14 +19,13 @@ class _MainNavShellState extends State<MainNavShell> {
   final List<Widget> _screens = const [
     HomeScreen(),
     MarketScreen(),
-    MyAlertsScreen(), // temporarily used as Watchlist/Watch screen
+    MyAlertsScreen(), // acts as Watchlist/Watch for now
     ProfileScreen(),
   ];
 
   @override
   void initState() {
     super.initState();
-    // Only initialize push notifications on mobile (not web).
     if (!kIsWeb) {
       FCMService().initNotifications();
     }

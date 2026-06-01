@@ -73,7 +73,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   const SizedBox(height: 30),
-                  const Icon(Icons.error_outline, color: AppTheme.lossColor, size: 64),
+                  const Icon(
+                    Icons.error_outline,
+                    color: AppTheme.lossColor,
+                    size: 64,
+                  ),
                   const SizedBox(height: 12),
                   Text('Failed to load profile:\n${snapshot.error}'),
                   const SizedBox(height: 12),
@@ -92,7 +96,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             final profile = data.profile;
             final brokerRow = data.brokerRow;
 
-            final email = profile?.email ?? authService.currentUser?.email ?? 'User';
+            final email =
+                profile?.email ?? authService.currentUser?.email ?? 'User';
             final fullName = profile?.fullName ?? 'No name added';
             final role = profile?.role ?? 'investor';
             final kycStatus = profile?.kycStatus ?? 'pending';
@@ -112,16 +117,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           const CircleAvatar(
                             radius: 28,
                             backgroundColor: AppTheme.primaryColor,
-                            child: Icon(Icons.person, color: Colors.white, size: 28),
+                            child: Icon(
+                              Icons.person,
+                              color: Colors.white,
+                              size: 28,
+                            ),
                           ),
                           const SizedBox(width: 16),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(fullName, style: Theme.of(context).textTheme.titleLarge),
+                                Text(
+                                  fullName,
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
                                 const SizedBox(height: 4),
-                                Text(email, style: Theme.of(context).textTheme.bodyMedium),
+                                Text(
+                                  email,
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
                               ],
                             ),
                           ),
@@ -148,11 +163,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       children: [
                         Card(
                           child: ListTile(
-                            leading: const Icon(Icons.notifications_none_outlined),
+                            leading: const Icon(
+                              Icons.notifications_none_outlined,
+                            ),
                             title: const Text('Notifications'),
                             trailing: const Icon(Icons.chevron_right),
                             onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                              MaterialPageRoute(
+                                builder: (_) => const NotificationsScreen(),
+                              ),
                             ),
                           ),
                         ),
@@ -164,7 +183,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             subtitle: const Text('Price targets & alerts'),
                             trailing: const Icon(Icons.chevron_right),
                             onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const MyAlertsScreen()),
+                              MaterialPageRoute(
+                                builder: (_) => const MyAlertsScreen(),
+                              ),
                             ),
                           ),
                         ),
@@ -174,14 +195,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         if (isAdmin || isApprovedBroker) ...[
                           Card(
                             child: ListTile(
-                              leading: const Icon(Icons.business_center_outlined),
+                              leading: const Icon(
+                                Icons.business_center_outlined,
+                              ),
                               title: const Text('Broker Dashboard'),
-                              subtitle: Text(isAdmin
-                                  ? 'Admin view of broker inbox'
-                                  : 'Manage incoming client requests'),
+                              subtitle: Text(
+                                isAdmin
+                                    ? 'Admin view of broker inbox'
+                                    : 'Manage incoming client requests',
+                              ),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => const BrokerDashboardScreen()),
+                                MaterialPageRoute(
+                                  builder: (_) => const BrokerDashboardScreen(),
+                                ),
                               ),
                             ),
                           ),
@@ -192,12 +219,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         if (isAdmin) ...[
                           Card(
                             child: ListTile(
-                              leading: const Icon(Icons.admin_panel_settings_outlined),
+                              leading: const Icon(
+                                Icons.admin_panel_settings_outlined,
+                              ),
                               title: const Text('Admin Dashboard'),
-                              subtitle: const Text('Ads, premium requests, approvals'),
+                              subtitle: const Text(
+                                'Ads, premium requests, approvals',
+                              ),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+                                MaterialPageRoute(
+                                  builder: (_) => const AdminDashboardScreen(),
+                                ),
                               ),
                             ),
                           ),
@@ -215,7 +248,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         await authService.signOut();
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Signed out successfully')),
+                          const SnackBar(
+                            content: Text('Signed out successfully'),
+                          ),
                         );
                       },
                       icon: const Icon(Icons.logout),

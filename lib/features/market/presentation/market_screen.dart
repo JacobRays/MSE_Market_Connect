@@ -107,9 +107,9 @@ class _MarketScreenState extends State<MarketScreen> {
   Future<void> _refresh() async {
     await _loadAll();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Market refreshed')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Market refreshed')));
   }
 
   void _listenStocksRealtime() {
@@ -128,7 +128,9 @@ class _MarketScreenState extends State<MarketScreen> {
 
             final prev = _lastPrice[updated.symbol];
             if (prev != null) {
-              final dir = updated.price > prev ? 1 : (updated.price < prev ? -1 : 0);
+              final dir = updated.price > prev
+                  ? 1
+                  : (updated.price < prev ? -1 : 0);
               if (dir != 0) _triggerFlash(updated.symbol, dir);
             }
             _lastPrice[updated.symbol] = updated.price;
@@ -136,7 +138,8 @@ class _MarketScreenState extends State<MarketScreen> {
             final idx = _stocks.indexWhere((s) => s.symbol == updated.symbol);
             setState(() {
               if (idx == -1) {
-                _stocks = [..._stocks, updated]..sort((a, b) => a.symbol.compareTo(b.symbol));
+                _stocks = [..._stocks, updated]
+                  ..sort((a, b) => a.symbol.compareTo(b.symbol));
               } else {
                 final copy = [..._stocks];
                 copy[idx] = updated;
@@ -171,7 +174,9 @@ class _MarketScreenState extends State<MarketScreen> {
 
     final visible = _view == MarketView.all
         ? _stocks
-        : _stocks.where((s) => _activeAlertBySymbol.containsKey(s.symbol)).toList();
+        : _stocks
+              .where((s) => _activeAlertBySymbol.containsKey(s.symbol))
+              .toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -186,9 +191,9 @@ class _MarketScreenState extends State<MarketScreen> {
           ),
           IconButton(
             tooltip: 'Watch (Targets)',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const MyAlertsScreen()),
-            ),
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const MyAlertsScreen())),
             icon: const Icon(Icons.track_changes_outlined),
           ),
         ],
@@ -198,138 +203,181 @@ class _MarketScreenState extends State<MarketScreen> {
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : (_error != null)
-                ? ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      const SizedBox(height: 40),
-                      const Icon(Icons.error_outline, color: AppTheme.lossColor, size: 64),
-                      const SizedBox(height: 12),
-                      Text('Failed to load market data.\n$_error', textAlign: TextAlign.center),
-                    ],
-                  )
-                : ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      if (canShowToggle) ...[
-                        SegmentedButton<MarketView>(
-                          segments: const [
-                            ButtonSegment(value: MarketView.all, label: Text('All')),
-                            ButtonSegment(value: MarketView.watching, label: Text('Watching')),
-                          ],
-                          selected: {_view},
-                          onSelectionChanged: (set) => setState(() => _view = set.first),
+            ? ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                children: [
+                  const SizedBox(height: 40),
+                  const Icon(
+                    Icons.error_outline,
+                    color: AppTheme.lossColor,
+                    size: 64,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Failed to load market data.\n$_error',
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              )
+            : ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (canShowToggle) ...[
+                    SegmentedButton<MarketView>(
+                      segments: const [
+                        ButtonSegment(
+                          value: MarketView.all,
+                          label: Text('All'),
                         ),
-                        const SizedBox(height: 16),
+                        ButtonSegment(
+                          value: MarketView.watching,
+                          label: Text('Watching'),
+                        ),
                       ],
-                      if (visible.isEmpty) ...[
-                        const SizedBox(height: 60),
-                        const Icon(Icons.show_chart, size: 64),
-                        const SizedBox(height: 12),
-                        Text(
-                          _view == MarketView.watching
-                              ? 'You are not watching any companies yet.\nCreate a price target in Trade → Alert.'
-                              : 'No stocks available yet.',
-                          textAlign: TextAlign.center,
-                        ),
-                      ] else ...[
-                        ...visible.map((stock) {
-                          final alert = _activeAlertBySymbol[stock.symbol];
-                          final isPositive = stock.changePercent >= 0;
+                      selected: {_view},
+                      onSelectionChanged: (set) =>
+                          setState(() => _view = set.first),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (visible.isEmpty) ...[
+                    const SizedBox(height: 60),
+                    const Icon(Icons.show_chart, size: 64),
+                    const SizedBox(height: 12),
+                    Text(
+                      _view == MarketView.watching
+                          ? 'You are not watching any companies yet.\nCreate a price target in Trade → Alert.'
+                          : 'No stocks available yet.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ] else ...[
+                    ...visible.map((stock) {
+                      final alert = _activeAlertBySymbol[stock.symbol];
+                      final isPositive = stock.changePercent >= 0;
 
-                          final flash = _flashDir[stock.symbol] ?? 0;
-                          final flashColor = flash == 1
-                              ? AppTheme.gainColor.withValues(alpha: 0.10)
-                              : flash == -1
-                                  ? AppTheme.lossColor.withValues(alpha: 0.10)
-                                  : Colors.transparent;
+                      final flash = _flashDir[stock.symbol] ?? 0;
+                      final flashColor = flash == 1
+                          ? AppTheme.gainColor.withOpacity(0.10)
+                          : flash == -1
+                          ? AppTheme.lossColor.withOpacity(0.10)
+                          : Colors.transparent;
 
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: Card(
-                              child: ListTile(
-                                onTap: () => Navigator.of(context).push(
-                                  MaterialPageRoute(builder: (_) => StockDetailScreen(stock: stock)),
-                                ),
-                                contentPadding: const EdgeInsets.all(16),
-                                title: Text(stock.symbol, style: Theme.of(context).textTheme.titleMedium),
-                                subtitle: Padding(
-                                  padding: const EdgeInsets.only(top: 6),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(stock.companyName),
-                                      if (alert != null) ...[
-                                        const SizedBox(height: 6),
-                                        Text(_watchLine(alert), style: const TextStyle(fontWeight: FontWeight.w700)),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                                trailing: SizedBox(
-                                  width: 230,
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      TextButton(
-                                        onPressed: () => MarketActionSheet.show(context, stock),
-                                        child: const Text('Trade'),
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Card(
+                          child: ListTile(
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => StockDetailScreen(stock: stock),
+                              ),
+                            ),
+                            contentPadding: const EdgeInsets.all(16),
+                            title: Text(
+                              stock.symbol,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            subtitle: Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(stock.companyName),
+                                  if (alert != null) ...[
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      _watchLine(alert),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
                                       ),
-                                      const SizedBox(width: 6),
-                                      AnimatedContainer(
-                                        duration: const Duration(milliseconds: 250),
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                        decoration: BoxDecoration(
-                                          color: flashColor,
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          crossAxisAlignment: CrossAxisAlignment.end,
-                                          children: [
-                                            AnimatedSwitcher(
-                                              duration: const Duration(milliseconds: 200),
-                                              transitionBuilder: (child, anim) =>
-                                                  FadeTransition(opacity: anim, child: child),
-                                              child: Text(
-                                                'MWK ${stock.price.toStringAsFixed(2)}',
-                                                key: ValueKey(stock.price),
-                                                style: Theme.of(context).textTheme.titleMedium,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            trailing: SizedBox(
+                              width: 230,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        MarketActionSheet.show(context, stock),
+                                    child: const Text('Trade'),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  AnimatedContainer(
+                                    duration: const Duration(milliseconds: 250),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: flashColor,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
+                                      children: [
+                                        AnimatedSwitcher(
+                                          duration: const Duration(
+                                            milliseconds: 200,
+                                          ),
+                                          transitionBuilder: (child, anim) =>
+                                              FadeTransition(
+                                                opacity: anim,
+                                                child: child,
                                               ),
+                                          child: Text(
+                                            'MWK ${stock.price.toStringAsFixed(2)}',
+                                            key: ValueKey(stock.price),
+                                            style: Theme.of(
+                                              context,
+                                            ).textTheme.titleMedium,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              isPositive
+                                                  ? Icons.arrow_upward
+                                                  : Icons.arrow_downward,
+                                              size: 14,
+                                              color: isPositive
+                                                  ? AppTheme.gainColor
+                                                  : AppTheme.lossColor,
                                             ),
-                                            const SizedBox(height: 4),
-                                            Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  isPositive ? Icons.arrow_upward : Icons.arrow_downward,
-                                                  size: 14,
-                                                  color: isPositive ? AppTheme.gainColor : AppTheme.lossColor,
-                                                ),
-                                                const SizedBox(width: 2),
-                                                Text(
-                                                  '${isPositive ? '+' : ''}${stock.changePercent.toStringAsFixed(2)}%',
-                                                  style: TextStyle(
-                                                    color: isPositive ? AppTheme.gainColor : AppTheme.lossColor,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                              ],
+                                            const SizedBox(width: 2),
+                                            Text(
+                                              '${isPositive ? '+' : ''}${stock.changePercent.toStringAsFixed(2)}%',
+                                              style: TextStyle(
+                                                color: isPositive
+                                                    ? AppTheme.gainColor
+                                                    : AppTheme.lossColor,
+                                                fontWeight: FontWeight.w600,
+                                              ),
                                             ),
                                           ],
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
-                                ),
+                                ],
                               ),
                             ),
-                          );
-                        }),
-                      ],
-                    ],
-                  ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                ],
+              ),
       ),
     );
   }
