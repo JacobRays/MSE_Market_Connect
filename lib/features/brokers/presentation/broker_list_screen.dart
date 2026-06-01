@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mse_market_connect/core/services/broker_service.dart';
+import 'package:mse_market_connect/features/brokers/presentation/broker_detail_screen.dart';
 import 'package:mse_market_connect/shared/models/broker_model.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class BrokerListScreen extends StatelessWidget {
   const BrokerListScreen({super.key});
@@ -15,22 +15,49 @@ class BrokerListScreen extends StatelessWidget {
       body: FutureBuilder<List<BrokerModel>>(
         future: service.getActiveBrokers(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          final brokers = snapshot.data!;
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Text('Failed to load brokers:\n${snapshot.error}'),
+            );
+          }
+
+          final brokers = snapshot.data ?? [];
+          if (brokers.isEmpty) {
+            return const Center(
+              child: Text('No licensed brokers available yet.'),
+            );
+          }
 
           return ListView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: brokers.length,
-            itemBuilder: (context, i) => Card(
-              child: ListTile(
-                title: Text(brokers[i].name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text('Fee: ${(brokers[i].feeRate * 100).toStringAsFixed(1)}%\n${brokers[i].email ?? ""}\n${brokers[i].phone ?? ""}'),
-                trailing: const Icon(Icons.contact_phone_outlined),
-                onTap: () {
-                  if (brokers[i].phone != null) launchUrl(Uri.parse('tel:${brokers[i].phone}'));
-                },
-              ),
-            ),
+            itemBuilder: (context, i) {
+              final b = brokers[i];
+              final lines = <String>[
+                'Fee: ${(b.feeRate * 100).toStringAsFixed(1)}%',
+                if ((b.email ?? '').trim().isNotEmpty) b.email!.trim(),
+                if ((b.phone ?? '').trim().isNotEmpty) b.phone!.trim(),
+              ];
+
+              return Card(
+                child: ListTile(
+                  title: Text(
+                    b.name,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(lines.join('\n')),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => BrokerDetailScreen(broker: b),
+                    ),
+                  ),
+                ),
+              );
+            },
           );
         },
       ),

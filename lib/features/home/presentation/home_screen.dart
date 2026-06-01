@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:mse_market_connect/core/services/ad_service.dart';
 import 'package:mse_market_connect/core/services/news_service.dart';
 import 'package:mse_market_connect/core/theme/app_theme.dart';
+import 'package:mse_market_connect/features/brokers/presentation/broker_list_screen.dart';
 import 'package:mse_market_connect/features/learning/presentation/learning_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/market_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/my_alerts_screen.dart';
+import 'package:mse_market_connect/features/news/presentation/news_screen.dart';
+import 'package:mse_market_connect/features/portfolio/presentation/portfolio_screen.dart';
+import 'package:mse_market_connect/features/profile/presentation/support_screen.dart';
 import 'package:mse_market_connect/features/trade/presentation/my_orders_screen.dart';
 import 'package:mse_market_connect/shared/models/ad_model.dart';
 import 'package:mse_market_connect/shared/models/news_model.dart';
@@ -54,6 +58,46 @@ class HomeScreen extends StatelessWidget {
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const LearningScreen())),
+      ),
+      _QuickActionData(
+        icon: Icons.newspaper_rounded,
+        label: 'News',
+        gradient: const LinearGradient(
+          colors: [Color(0xFF263238), Color(0xFF455A64)],
+        ),
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const NewsScreen())),
+      ),
+      _QuickActionData(
+        icon: Icons.account_balance_wallet_rounded,
+        label: 'Portfolio',
+        gradient: const LinearGradient(
+          colors: [Color(0xFF2E7D32), Color(0xFF43A047)],
+        ),
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const PortfolioScreen())),
+      ),
+      _QuickActionData(
+        icon: Icons.support_agent_rounded,
+        label: 'Support',
+        gradient: const LinearGradient(
+          colors: [Color(0xFF5D4037), Color(0xFF6D4C41)],
+        ),
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const SupportScreen())),
+      ),
+      _QuickActionData(
+        icon: Icons.business_center_rounded,
+        label: 'Brokers',
+        gradient: const LinearGradient(
+          colors: [Color(0xFF283593), Color(0xFF3949AB)],
+        ),
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const BrokerListScreen())),
       ),
     ];
 
@@ -230,12 +274,14 @@ class _QuickActionData {
 class _QuickAction3DCard extends StatefulWidget {
   final _QuickActionData item;
   const _QuickAction3DCard({required this.item});
+
   @override
   State<_QuickAction3DCard> createState() => _QuickAction3DCardState();
 }
 
 class _QuickAction3DCardState extends State<_QuickAction3DCard> {
   bool _pressed = false;
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
