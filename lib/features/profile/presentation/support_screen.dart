@@ -14,9 +14,10 @@ class _SupportScreenState extends State<SupportScreen> {
   final _message = TextEditingController();
 
   bool _submitting = false;
+  String? _deletingId;
   late Future<List<Map<String, dynamic>>> _ticketsFuture;
 
-  final List<Map<String, String>> _faqs = [
+  final List<Map<String, String>> _faqs = const [
     {
       'q': 'What are MSE trading hours?',
       'a': 'Trading happens Monday to Friday from 9:00 AM to 3:00 PM.',
@@ -67,14 +68,58 @@ class _SupportScreenState extends State<SupportScreen> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Ticket sent to support')));
 
+      // fire-and-forget refresh
+      // ignore: discarded_futures
+      _reloadTickets();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error sending ticket: $e')));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _confirmDeleteTicket(String id) async {
+    final ok =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Delete ticket?'),
+            content: const Text('This will remove the ticket from your list.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!ok) return;
+
+    setState(() => _deletingId = id);
+    try {
+      await _service.deleteTicket(id);
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Ticket deleted')));
       await _reloadTickets();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      ).showSnackBar(SnackBar(content: Text('Error deleting ticket: $e')));
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      if (mounted) setState(() => _deletingId = null);
     }
   }
 
@@ -114,9 +159,11 @@ class _SupportScreenState extends State<SupportScreen> {
                   );
                 }
                 if (snapshot.hasError) {
-                  return Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Text('Failed to load tickets:\n${snapshot.error}'),
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text('Failed to load tickets:\n${snapshot.error}'),
+                    ),
                   );
                 }
 
@@ -135,6 +182,7 @@ class _SupportScreenState extends State<SupportScreen> {
 
                 return Column(
                   children: tickets.map((t) {
+                    final id = (t['id'] ?? '').toString();
                     final subject = (t['subject'] ?? '').toString();
                     final status = (t['status'] ?? 'open').toString();
                     final createdAt = (t['created_at'] ?? '').toString();
@@ -151,12 +199,34 @@ class _SupportScreenState extends State<SupportScreen> {
                         ),
                         children: [
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                             child: Align(
                               alignment: Alignment.centerLeft,
                               child: Text(message),
                             ),
                           ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(
+                              onPressed: id.isEmpty || _deletingId == id
+                                  ? null
+                                  : () => _confirmDeleteTicket(id),
+                              icon: _deletingId == id
+                                  ? const SizedBox(
+                                      height: 16,
+                                      width: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.delete_outline, size: 18),
+                              label: const Text(
+                                'Delete',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
                         ],
                       ),
                     );

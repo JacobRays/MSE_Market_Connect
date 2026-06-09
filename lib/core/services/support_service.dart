@@ -23,7 +23,18 @@ class SupportService {
         .select()
         .eq('user_id', user.id)
         .order('created_at', ascending: false);
-    
+
     return (response as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> deleteTicket(String id) async {
+    final user = _db.auth.currentUser;
+    if (user == null) throw StateError('Not logged in');
+
+    await _db
+        .from('support_tickets')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
   }
 }
