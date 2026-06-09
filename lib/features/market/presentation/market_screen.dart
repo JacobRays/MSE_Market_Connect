@@ -35,9 +35,9 @@ class _MarketScreenState extends State<MarketScreen> {
 
   RealtimeChannel? _stocksChannel;
 
-  // live price effects
+  // live price flash
   final Map<String, double> _lastPrice = {};
-  final Map<String, int> _flashDir = {}; // 1 up, -1 down
+  final Map<String, int> _flashDir = {};
   final Map<String, Timer> _flashTimers = {};
 
   @override
@@ -259,111 +259,175 @@ class _MarketScreenState extends State<MarketScreen> {
 
                       final flash = _flashDir[stock.symbol] ?? 0;
                       final flashColor = flash == 1
-                          ? AppTheme.gainColor.withValues(alpha: 0.10)
+                          ? AppTheme.gainColor.withOpacity(0.10)
                           : flash == -1
-                          ? AppTheme.lossColor.withValues(alpha: 0.10)
+                          ? AppTheme.lossColor.withOpacity(0.10)
                           : Colors.transparent;
 
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: Card(
-                          child: ListTile(
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
                             onTap: () => Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) => StockDetailScreen(stock: stock),
                               ),
                             ),
-                            contentPadding: const EdgeInsets.all(16),
-                            title: Text(
-                              stock.symbol,
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            subtitle: Padding(
-                              padding: const EdgeInsets.only(top: 6),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(stock.companyName),
-                                  if (alert != null) ...[
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      _watchLine(alert),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
-                                ],
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                16,
+                                14,
+                                12,
+                                14,
                               ),
-                            ),
-                            trailing: SizedBox(
-                              width: 230,
                               child: Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
+                                crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  TextButton(
-                                    onPressed: () =>
-                                        MarketActionSheet.show(context, stock),
-                                    child: const Text('Trade'),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  AnimatedContainer(
-                                    duration: const Duration(milliseconds: 250),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 6,
+                                  // Left: symbol + company + (alert)
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          stock.symbol,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          stock.companyName,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.bodyMedium,
+                                        ),
+                                        if (alert != null) ...[
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            _watchLine(alert),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 12.5,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
                                     ),
-                                    decoration: BoxDecoration(
-                                      color: flashColor,
-                                      borderRadius: BorderRadius.circular(12),
+                                  ),
+
+                                  const SizedBox(width: 10),
+
+                                  // Right: price + % change + trade
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      minWidth: 110,
+                                      maxWidth: 200,
                                     ),
                                     child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
+                                      mainAxisSize: MainAxisSize.min,
                                       crossAxisAlignment:
                                           CrossAxisAlignment.end,
                                       children: [
-                                        AnimatedSwitcher(
+                                        AnimatedContainer(
                                           duration: const Duration(
-                                            milliseconds: 200,
+                                            milliseconds: 250,
                                           ),
-                                          transitionBuilder: (child, anim) =>
-                                              FadeTransition(
-                                                opacity: anim,
-                                                child: child,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: flashColor,
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.end,
+                                            children: [
+                                              AnimatedSwitcher(
+                                                duration: const Duration(
+                                                  milliseconds: 200,
+                                                ),
+                                                transitionBuilder:
+                                                    (child, anim) =>
+                                                        FadeTransition(
+                                                          opacity: anim,
+                                                          child: child,
+                                                        ),
+                                                child: Text(
+                                                  'MWK ${stock.price.toStringAsFixed(2)}',
+                                                  key: ValueKey(stock.price),
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .titleSmall
+                                                      ?.copyWith(
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                      ),
+                                                ),
                                               ),
-                                          child: Text(
-                                            'MWK ${stock.price.toStringAsFixed(2)}',
-                                            key: ValueKey(stock.price),
-                                            style: Theme.of(
-                                              context,
-                                            ).textTheme.titleMedium,
+                                              const SizedBox(height: 2),
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    isPositive
+                                                        ? Icons.arrow_upward
+                                                        : Icons.arrow_downward,
+                                                    size: 13,
+                                                    color: isPositive
+                                                        ? AppTheme.gainColor
+                                                        : AppTheme.lossColor,
+                                                  ),
+                                                  const SizedBox(width: 2),
+                                                  Text(
+                                                    '${isPositive ? '+' : ''}${stock.changePercent.toStringAsFixed(2)}%',
+                                                    style: TextStyle(
+                                                      color: isPositive
+                                                          ? AppTheme.gainColor
+                                                          : AppTheme.lossColor,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                        const SizedBox(height: 4),
-                                        Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              isPositive
-                                                  ? Icons.arrow_upward
-                                                  : Icons.arrow_downward,
-                                              size: 14,
-                                              color: isPositive
-                                                  ? AppTheme.gainColor
-                                                  : AppTheme.lossColor,
+                                        const SizedBox(height: 8),
+                                        SizedBox(
+                                          height: 32,
+                                          child: OutlinedButton(
+                                            onPressed: () =>
+                                                MarketActionSheet.show(
+                                                  context,
+                                                  stock,
+                                                ),
+                                            style: OutlinedButton.styleFrom(
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 12,
+                                                  ),
                                             ),
-                                            const SizedBox(width: 2),
-                                            Text(
-                                              '${isPositive ? '+' : ''}${stock.changePercent.toStringAsFixed(2)}%',
-                                              style: TextStyle(
-                                                color: isPositive
-                                                    ? AppTheme.gainColor
-                                                    : AppTheme.lossColor,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
+                                            child: const Text('Trade'),
+                                          ),
                                         ),
                                       ],
                                     ),

@@ -144,7 +144,7 @@ class _NewsTicker extends StatelessWidget {
         return Container(
           height: 40,
           decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withOpacity(0.05),
+            color: AppTheme.primaryColor.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(8),
           ),
           child: ListView(
@@ -276,7 +276,7 @@ class _QuickActionChip extends StatelessWidget {
       color: scheme.surface,
       elevation: 0,
       shape: StadiumBorder(
-        side: BorderSide(color: Colors.black.withOpacity(0.06)),
+        side: BorderSide(color: Colors.black.withValues(alpha: 0.06)),
       ),
       child: InkWell(
         onTap: item.onTap,
