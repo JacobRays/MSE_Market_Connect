@@ -1,8 +1,9 @@
-name: Update MSE Prices
+name: Update News and Prices
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/30 7-14 * * 1-5"
+    - cron: "0 * * * *" # Every hour
+
 jobs:
   scrape:
     runs-on: ubuntu-latest
@@ -11,11 +12,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -r tools/scraper/requirements.txt
-      - name: Update Stocks and News
+      - run: pip install requests beautifulsoup4
+      - name: Run Scrapers
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          python tools/scraper/mse_mainboard_prices.py
-          python tools/scraper/mse_announcements_scraper.py
+          # We run news because it works on GitHub
+          python tools/scraper/news_scraper.py
+          # We try prices, but if it fails (403), it won't stop the news
+          python tools/scraper/mse_mainboard_prices.py || true

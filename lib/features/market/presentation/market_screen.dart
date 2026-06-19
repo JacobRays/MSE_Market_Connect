@@ -259,9 +259,9 @@ class _MarketScreenState extends State<MarketScreen> {
 
                       final flash = _flashDir[stock.symbol] ?? 0;
                       final flashColor = flash == 1
-                          ? AppTheme.gainColor.withOpacity(0.10)
+                          ? AppTheme.gainColor.withValues(alpha: 0.10)
                           : flash == -1
-                          ? AppTheme.lossColor.withOpacity(0.10)
+                          ? AppTheme.lossColor.withValues(alpha: 0.10)
                           : Colors.transparent;
 
                       return Padding(
