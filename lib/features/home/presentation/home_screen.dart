@@ -3,6 +3,7 @@ import 'package:mse_market_connect/core/services/ad_service.dart';
 import 'package:mse_market_connect/core/services/news_service.dart';
 import 'package:mse_market_connect/core/theme/app_theme.dart';
 import 'package:mse_market_connect/features/brokers/presentation/broker_list_screen.dart';
+import 'package:mse_market_connect/features/home/presentation/quick_actions_screen.dart';
 import 'package:mse_market_connect/features/learning/presentation/learning_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/market_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/my_alerts_screen.dart';
@@ -18,88 +19,76 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final actions = [
-      _QuickActionData(
+    final actions = <QuickActionItem>[
+      QuickActionItem(
         icon: Icons.show_chart_rounded,
         label: 'Market',
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0D47A1), Color(0xFF1976D2)],
-        ),
+        color: const Color(0xFF1976D2),
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const MarketScreen())),
       ),
-      _QuickActionData(
+      QuickActionItem(
         icon: Icons.receipt_long_rounded,
         label: 'My Orders',
-        gradient: const LinearGradient(
-          colors: [Color(0xFF6A1B9A), Color(0xFF8E24AA)],
-        ),
+        color: const Color(0xFF8E24AA),
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const MyOrdersScreen())),
       ),
-      _QuickActionData(
+      QuickActionItem(
         icon: Icons.star_rounded,
         label: 'Watchlist',
-        gradient: const LinearGradient(
-          colors: [Color(0xFFF9A825), Color(0xFFFFB300)],
-        ),
+        color: const Color(0xFFF9A825),
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const MyAlertsScreen())),
       ),
-      _QuickActionData(
+      QuickActionItem(
         icon: Icons.school_rounded,
         label: 'Learn',
-        gradient: const LinearGradient(
-          colors: [Color(0xFF00695C), Color(0xFF00897B)],
-        ),
+        color: const Color(0xFF00897B),
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const LearningScreen())),
       ),
-      _QuickActionData(
+      QuickActionItem(
         icon: Icons.newspaper_rounded,
         label: 'News',
-        gradient: const LinearGradient(
-          colors: [Color(0xFF263238), Color(0xFF455A64)],
-        ),
+        color: const Color(0xFF455A64),
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const NewsScreen())),
       ),
-      _QuickActionData(
+      QuickActionItem(
         icon: Icons.account_balance_wallet_rounded,
         label: 'Portfolio',
-        gradient: const LinearGradient(
-          colors: [Color(0xFF2E7D32), Color(0xFF43A047)],
-        ),
+        color: const Color(0xFF43A047),
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const PortfolioScreen())),
       ),
-      _QuickActionData(
+      QuickActionItem(
         icon: Icons.support_agent_rounded,
         label: 'Support',
-        gradient: const LinearGradient(
-          colors: [Color(0xFF5D4037), Color(0xFF6D4C41)],
-        ),
+        color: const Color(0xFF6D4C41),
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const SupportScreen())),
       ),
-      _QuickActionData(
+      QuickActionItem(
         icon: Icons.business_center_rounded,
         label: 'Brokers',
-        gradient: const LinearGradient(
-          colors: [Color(0xFF283593), Color(0xFF3949AB)],
-        ),
+        color: const Color(0xFF3949AB),
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const BrokerListScreen())),
       ),
     ];
+
+    final homeActions = actions
+        .take(8)
+        .toList(); // show 8 on home like Airtel screen
 
     return Scaffold(
       appBar: AppBar(title: const Text('MSE Market Connect')),
@@ -110,20 +99,96 @@ class HomeScreen extends StatelessWidget {
             const _NewsTicker(),
             const SizedBox(height: 14),
             const _AdPanel(),
-            const SizedBox(height: 16),
-            Text(
-              'Quick Actions',
-              style: Theme.of(context).textTheme.titleLarge,
+            const SizedBox(height: 18),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Quick Actions',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => QuickActionsScreen(actions: actions),
+                    ),
+                  ),
+                  child: const Text('View All'),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: actions.map((a) => _QuickActionChip(item: a)).toList(),
-            ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 10),
+
+            _HomeQuickActionsGrid(actions: homeActions),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _HomeQuickActionsGrid extends StatelessWidget {
+  final List<QuickActionItem> actions;
+  const _HomeQuickActionsGrid({required this.actions});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final crossAxisCount = c.maxWidth < 360 ? 3 : 4;
+        return GridView.builder(
+          itemCount: actions.length,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            mainAxisSpacing: 14,
+            crossAxisSpacing: 10,
+            childAspectRatio: 0.95,
+          ),
+          itemBuilder: (context, i) => _QuickActionCircle(item: actions[i]),
+        );
+      },
+    );
+  }
+}
+
+class _QuickActionCircle extends StatelessWidget {
+  final QuickActionItem item;
+  const _QuickActionCircle({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: item.onTap,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            height: 54,
+            width: 54,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: item.color.withOpacity(0.10),
+              border: Border.all(color: item.color.withOpacity(0.18)),
+            ),
+            child: Icon(item.icon, color: item.color, size: 26),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            item.label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: Theme.of(
+              context,
+            ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ],
       ),
     );
   }
@@ -144,7 +209,7 @@ class _NewsTicker extends StatelessWidget {
         return Container(
           height: 40,
           decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withValues(alpha: 0.05),
+            color: AppTheme.primaryColor.withOpacity(0.05),
             borderRadius: BorderRadius.circular(8),
           ),
           child: ListView(
@@ -246,65 +311,6 @@ class _AdCard extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _QuickActionData {
-  final IconData icon;
-  final String label;
-  final Gradient gradient;
-  final VoidCallback onTap;
-  _QuickActionData({
-    required this.icon,
-    required this.label,
-    required this.gradient,
-    required this.onTap,
-  });
-}
-
-class _QuickActionChip extends StatelessWidget {
-  final _QuickActionData item;
-  const _QuickActionChip({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return Material(
-      color: scheme.surface,
-      elevation: 0,
-      shape: StadiumBorder(
-        side: BorderSide(color: Colors.black.withValues(alpha: 0.06)),
-      ),
-      child: InkWell(
-        onTap: item.onTap,
-        customBorder: const StadiumBorder(),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                height: 28,
-                width: 28,
-                decoration: BoxDecoration(
-                  gradient: item.gradient,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(item.icon, color: Colors.white, size: 16),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                item.label,
-                style: Theme.of(
-                  context,
-                ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
