@@ -23,7 +23,6 @@ class HomeScreen extends StatelessWidget {
       QuickActionItem(
         icon: Icons.show_chart_rounded,
         label: 'Market',
-        color: const Color(0xFF1976D2),
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const MarketScreen())),
@@ -31,7 +30,6 @@ class HomeScreen extends StatelessWidget {
       QuickActionItem(
         icon: Icons.receipt_long_rounded,
         label: 'My Orders',
-        color: const Color(0xFF8E24AA),
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const MyOrdersScreen())),
@@ -39,7 +37,6 @@ class HomeScreen extends StatelessWidget {
       QuickActionItem(
         icon: Icons.star_rounded,
         label: 'Watchlist',
-        color: const Color(0xFFF9A825),
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const MyAlertsScreen())),
@@ -47,7 +44,6 @@ class HomeScreen extends StatelessWidget {
       QuickActionItem(
         icon: Icons.school_rounded,
         label: 'Learn',
-        color: const Color(0xFF00897B),
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const LearningScreen())),
@@ -55,7 +51,6 @@ class HomeScreen extends StatelessWidget {
       QuickActionItem(
         icon: Icons.newspaper_rounded,
         label: 'News',
-        color: const Color(0xFF455A64),
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const NewsScreen())),
@@ -63,7 +58,6 @@ class HomeScreen extends StatelessWidget {
       QuickActionItem(
         icon: Icons.account_balance_wallet_rounded,
         label: 'Portfolio',
-        color: const Color(0xFF43A047),
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const PortfolioScreen())),
@@ -71,7 +65,6 @@ class HomeScreen extends StatelessWidget {
       QuickActionItem(
         icon: Icons.support_agent_rounded,
         label: 'Support',
-        color: const Color(0xFF6D4C41),
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const SupportScreen())),
@@ -79,16 +72,13 @@ class HomeScreen extends StatelessWidget {
       QuickActionItem(
         icon: Icons.business_center_rounded,
         label: 'Brokers',
-        color: const Color(0xFF3949AB),
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const BrokerListScreen())),
       ),
     ];
 
-    final homeActions = actions
-        .take(8)
-        .toList(); // show 8 on home like Airtel screen
+    final homeActions = actions.take(8).toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('MSE Market Connect')),
@@ -100,7 +90,6 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 14),
             const _AdPanel(),
             const SizedBox(height: 18),
-
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -121,7 +110,6 @@ class HomeScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-
             _HomeQuickActionsGrid(actions: homeActions),
           ],
         ),
@@ -162,6 +150,10 @@ class _QuickActionCircle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final iconColor = AppTheme.primaryColor;
+    final bg = AppTheme.primaryColor.withOpacity(0.08);
+    final border = AppTheme.primaryColor.withOpacity(0.14);
+
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: item.onTap,
@@ -173,10 +165,10 @@ class _QuickActionCircle extends StatelessWidget {
             width: 54,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: item.color.withOpacity(0.10),
-              border: Border.all(color: item.color.withOpacity(0.18)),
+              color: bg,
+              border: Border.all(color: border),
             ),
-            child: Icon(item.icon, color: item.color, size: 26),
+            child: Icon(item.icon, color: iconColor, size: 26),
           ),
           const SizedBox(height: 10),
           Text(
@@ -199,12 +191,15 @@ class _NewsTicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<NewsModel>>(
+    return FutureBuilder(
       future: NewsService().getLatestNews(),
       builder: (context, snapshot) {
         String text = "Welcome to MSE Market Connect. Stay tuned for updates.";
-        if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-          text = snapshot.data!.map((n) => "• ${n.title}").join("   ");
+        if (snapshot.hasData) {
+          final items = snapshot.data!;
+          if (items.isNotEmpty) {
+            text = items.map((n) => "• ${n.title}").join("   ");
+          }
         }
         return Container(
           height: 40,

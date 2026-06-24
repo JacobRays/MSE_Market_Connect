@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mse_market_connect/core/theme/app_theme.dart';
 
 class QuickActionsScreen extends StatelessWidget {
   final List<QuickActionItem> actions;
@@ -20,13 +21,11 @@ class QuickActionsScreen extends StatelessWidget {
 class QuickActionItem {
   final IconData icon;
   final String label;
-  final Color color;
   final VoidCallback onTap;
 
   const QuickActionItem({
     required this.icon,
     required this.label,
-    required this.color,
     required this.onTap,
   });
 }
@@ -62,6 +61,10 @@ class _QuickActionCircle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final iconColor = AppTheme.primaryColor;
+    final bg = AppTheme.primaryColor.withOpacity(0.08);
+    final border = AppTheme.primaryColor.withOpacity(0.14);
+
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: item.onTap,
@@ -73,10 +76,10 @@ class _QuickActionCircle extends StatelessWidget {
             width: 54,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: item.color.withOpacity(0.10),
-              border: Border.all(color: item.color.withOpacity(0.18)),
+              color: bg,
+              border: Border.all(color: border),
             ),
-            child: Icon(item.icon, color: item.color, size: 26),
+            child: Icon(item.icon, color: iconColor, size: 26),
           ),
           const SizedBox(height: 10),
           Text(
