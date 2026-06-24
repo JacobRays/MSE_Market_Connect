@@ -55,10 +55,36 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     await _future;
 
     if (!silent && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Notifications refreshed')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Notifications refreshed')));
     }
+  }
+
+  Future<bool> _confirm(String title, String message) async {
+    final res = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    return res ?? false;
+  }
+
+  Future<void> _deleteOne(NotificationModel n) async {
+    await _service.deleteNotification(n.id);
+    await _refresh(silent: true);
   }
 
   @override
@@ -67,12 +93,25 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       appBar: AppBar(
         title: const Text('Notifications'),
         actions: [
-          TextButton(
-            onPressed: () async {
-              await _service.markAllAsRead();
-              await _refresh(silent: true);
+          PopupMenuButton<String>(
+            onSelected: (v) async {
+              if (v == 'read') {
+                await _service.markAllAsRead();
+                await _refresh(silent: true);
+              } else if (v == 'clear') {
+                final ok = await _confirm(
+                  'Clear all notifications?',
+                  'This cannot be undone.',
+                );
+                if (!ok) return;
+                await _service.clearAll();
+                await _refresh(silent: true);
+              }
             },
-            child: const Text('Mark all read'),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'read', child: Text('Mark all read')),
+              PopupMenuItem(value: 'clear', child: Text('Clear all')),
+            ],
           ),
         ],
       ),
@@ -117,27 +156,90 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               itemBuilder: (context, index) {
                 final n = items[index];
 
-                return Card(
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.all(16),
-                    leading: Icon(n.isRead ? Icons.notifications : Icons.notifications_active),
-                    title: Text(
-                      n.title,
-                      style: n.isRead
-                          ? null
-                          : const TextStyle(fontWeight: FontWeight.w800),
+                return Dismissible(
+                  key: ValueKey(n.id),
+                  direction: DismissDirection.endToStart,
+                  confirmDismiss: (_) => _confirm(
+                    'Delete notification?',
+                    'This will remove it from your list.',
+                  ),
+                  onDismissed: (_) async {
+                    try {
+                      await _deleteOne(n);
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Notification deleted')),
+                      );
+                    } catch (e) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Delete failed: $e')),
+                      );
+                      await _refresh(silent: true);
+                    }
+                  },
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade600,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    subtitle: Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(n.body),
+                    child: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.white,
                     ),
-                    trailing: n.isRead ? null : const Icon(Icons.circle, size: 10),
-                    onTap: () async {
-                      if (!n.isRead) {
-                        await _service.markAsRead(n.id);
-                        await _refresh(silent: true);
-                      }
-                    },
+                  ),
+                  child: Card(
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.all(16),
+                      leading: Icon(
+                        n.isRead
+                            ? Icons.notifications
+                            : Icons.notifications_active,
+                      ),
+                      title: Text(
+                        n.title,
+                        style: n.isRead
+                            ? null
+                            : const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(n.body),
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (!n.isRead) const Icon(Icons.circle, size: 10),
+                          const SizedBox(width: 10),
+                          IconButton(
+                            tooltip: 'Delete',
+                            onPressed: () async {
+                              final ok = await _confirm(
+                                'Delete notification?',
+                                'This will remove it from your list.',
+                              );
+                              if (!ok) return;
+                              await _deleteOne(n);
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Notification deleted'),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.delete_outline),
+                          ),
+                        ],
+                      ),
+                      onTap: () async {
+                        if (!n.isRead) {
+                          await _service.markAsRead(n.id);
+                          await _refresh(silent: true);
+                        }
+                      },
+                    ),
                   ),
                 );
               },

@@ -41,4 +41,22 @@ class NotificationService {
         .eq('user_id', user.id)
         .isFilter('read_at', null);
   }
+
+  Future<void> deleteNotification(int id) async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw StateError('User not logged in');
+
+    await _client
+        .from('notifications')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+  }
+
+  Future<void> clearAll() async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw StateError('User not logged in');
+
+    await _client.from('notifications').delete().eq('user_id', user.id);
+  }
 }
