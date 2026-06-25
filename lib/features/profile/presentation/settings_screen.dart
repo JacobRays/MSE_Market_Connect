@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mse_market_connect/core/theme/theme_mode_controller.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,6 +18,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _hideBalances = false;
   bool _newsAutoRefresh = true;
 
+  ThemeMode _mode = ThemeMode.system;
+
   String _version = '';
 
   @override
@@ -32,6 +35,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _hideBalances = prefs.getBool(_kHideBalances) ?? false;
       _newsAutoRefresh = prefs.getBool(_kNewsAutoRefresh) ?? true;
+      _mode = ThemeModeController.themeMode.value;
       _version = '${info.version} (${info.buildNumber})';
       _loading = false;
     });
@@ -42,6 +46,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await prefs.setBool(key, value);
   }
 
+  String _modeLabel(ThemeMode m) {
+    switch (m) {
+      case ThemeMode.light:
+        return 'Light';
+      case ThemeMode.dark:
+        return 'Dark';
+      case ThemeMode.system:
+      default:
+        return 'System';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -50,6 +66,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               children: [
+                const SizedBox(height: 6),
+                ListTile(
+                  leading: const Icon(Icons.dark_mode_outlined),
+                  title: const Text('Theme'),
+                  subtitle: Text(_modeLabel(_mode)),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    final selected = await showModalBottomSheet<ThemeMode>(
+                      context: context,
+                      showDragHandle: true,
+                      builder: (_) {
+                        return SafeArea(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              RadioListTile(
+                                title: const Text('System'),
+                                value: ThemeMode.system,
+                                groupValue: _mode,
+                                onChanged: (v) => Navigator.pop(context, v),
+                              ),
+                              RadioListTile(
+                                title: const Text('Light'),
+                                value: ThemeMode.light,
+                                groupValue: _mode,
+                                onChanged: (v) => Navigator.pop(context, v),
+                              ),
+                              RadioListTile(
+                                title: const Text('Dark'),
+                                value: ThemeMode.dark,
+                                groupValue: _mode,
+                                onChanged: (v) => Navigator.pop(context, v),
+                              ),
+                              const SizedBox(height: 8),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+
+                    if (selected == null) return;
+                    setState(() => _mode = selected);
+                    await ThemeModeController.setThemeMode(selected);
+                  },
+                ),
+                const Divider(height: 1),
                 SwitchListTile(
                   title: const Text('Hide balances'),
                   subtitle: const Text('Hide portfolio values on screens'),

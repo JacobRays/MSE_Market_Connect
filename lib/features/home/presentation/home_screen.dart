@@ -3,82 +3,97 @@ import 'package:mse_market_connect/core/services/ad_service.dart';
 import 'package:mse_market_connect/core/services/news_service.dart';
 import 'package:mse_market_connect/core/theme/app_theme.dart';
 import 'package:mse_market_connect/features/brokers/presentation/broker_list_screen.dart';
-import 'package:mse_market_connect/features/home/presentation/quick_actions_screen.dart';
 import 'package:mse_market_connect/features/learning/presentation/learning_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/market_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/my_alerts_screen.dart';
 import 'package:mse_market_connect/features/news/presentation/news_screen.dart';
 import 'package:mse_market_connect/features/portfolio/presentation/portfolio_screen.dart';
+import 'package:mse_market_connect/features/profile/presentation/settings_screen.dart';
 import 'package:mse_market_connect/features/profile/presentation/support_screen.dart';
 import 'package:mse_market_connect/features/trade/presentation/my_orders_screen.dart';
 import 'package:mse_market_connect/shared/models/ad_model.dart';
 import 'package:mse_market_connect/shared/models/news_model.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
-    final actions = <QuickActionItem>[
-      QuickActionItem(
+    final actions = <_QuickActionItem>[
+      _QuickActionItem(
         icon: Icons.show_chart_rounded,
         label: 'Market',
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const MarketScreen())),
       ),
-      QuickActionItem(
-        icon: Icons.receipt_long_rounded,
-        label: 'My Orders',
-        onTap: () => Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const MyOrdersScreen())),
-      ),
-      QuickActionItem(
-        icon: Icons.star_rounded,
-        label: 'Watchlist',
-        onTap: () => Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const MyAlertsScreen())),
-      ),
-      QuickActionItem(
-        icon: Icons.school_rounded,
-        label: 'Learn',
-        onTap: () => Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const LearningScreen())),
-      ),
-      QuickActionItem(
-        icon: Icons.newspaper_rounded,
-        label: 'News',
-        onTap: () => Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const NewsScreen())),
-      ),
-      QuickActionItem(
+      _QuickActionItem(
         icon: Icons.account_balance_wallet_rounded,
         label: 'Portfolio',
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const PortfolioScreen())),
       ),
-      QuickActionItem(
-        icon: Icons.support_agent_rounded,
-        label: 'Support',
+      _QuickActionItem(
+        icon: Icons.star_rounded,
+        label: 'Watchlist',
         onTap: () => Navigator.of(
           context,
-        ).push(MaterialPageRoute(builder: (_) => const SupportScreen())),
+        ).push(MaterialPageRoute(builder: (_) => const MyAlertsScreen())),
       ),
-      QuickActionItem(
+      _QuickActionItem(
+        icon: Icons.newspaper_rounded,
+        label: 'News',
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const NewsScreen())),
+      ),
+      _QuickActionItem(
+        icon: Icons.receipt_long_rounded,
+        label: 'My Orders',
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const MyOrdersScreen())),
+      ),
+      _QuickActionItem(
+        icon: Icons.school_rounded,
+        label: 'Learn',
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const LearningScreen())),
+      ),
+      _QuickActionItem(
         icon: Icons.business_center_rounded,
         label: 'Brokers',
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const BrokerListScreen())),
       ),
+      _QuickActionItem(
+        icon: Icons.settings_outlined,
+        label: 'Settings',
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
+      ),
+      // These appear only when expanded (after first 8)
+      _QuickActionItem(
+        icon: Icons.support_agent_rounded,
+        label: 'Support',
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const SupportScreen())),
+      ),
     ];
 
-    final homeActions = actions.take(8).toList();
+    final shown = _expanded ? actions : actions.take(8).toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('MSE Market Connect')),
@@ -90,6 +105,7 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 14),
             const _AdPanel(),
             const SizedBox(height: 18),
+
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -100,17 +116,18 @@ class HomeScreen extends StatelessWidget {
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 TextButton(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => QuickActionsScreen(actions: actions),
-                    ),
-                  ),
-                  child: const Text('View All'),
+                  onPressed: () => setState(() => _expanded = !_expanded),
+                  child: Text(_expanded ? 'Collapse' : 'View All'),
                 ),
               ],
             ),
             const SizedBox(height: 10),
-            _HomeQuickActionsGrid(actions: homeActions),
+
+            AnimatedSize(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeInOut,
+              child: _QuickActionsGrid(actions: shown),
+            ),
           ],
         ),
       ),
@@ -118,15 +135,32 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-class _HomeQuickActionsGrid extends StatelessWidget {
-  final List<QuickActionItem> actions;
-  const _HomeQuickActionsGrid({required this.actions});
+class _QuickActionItem {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _QuickActionItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+}
+
+class _QuickActionsGrid extends StatelessWidget {
+  final List<_QuickActionItem> actions;
+  const _QuickActionsGrid({required this.actions});
 
   @override
   Widget build(BuildContext context) {
+    final iconColor = AppTheme.primaryColor;
+    final bg = AppTheme.primaryColor.withOpacity(0.08);
+    final border = AppTheme.primaryColor.withOpacity(0.14);
+
     return LayoutBuilder(
       builder: (context, c) {
         final crossAxisCount = c.maxWidth < 360 ? 3 : 4;
+
         return GridView.builder(
           itemCount: actions.length,
           shrinkWrap: true,
@@ -137,51 +171,40 @@ class _HomeQuickActionsGrid extends StatelessWidget {
             crossAxisSpacing: 10,
             childAspectRatio: 0.95,
           ),
-          itemBuilder: (context, i) => _QuickActionCircle(item: actions[i]),
+          itemBuilder: (context, i) {
+            final item = actions[i];
+            return InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: item.onTap,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    height: 54,
+                    width: 54,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: bg,
+                      border: Border.all(color: border),
+                    ),
+                    child: Icon(item.icon, color: iconColor, size: 26),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    item.label,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         );
       },
-    );
-  }
-}
-
-class _QuickActionCircle extends StatelessWidget {
-  final QuickActionItem item;
-  const _QuickActionCircle({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final iconColor = AppTheme.primaryColor;
-    final bg = AppTheme.primaryColor.withOpacity(0.08);
-    final border = AppTheme.primaryColor.withOpacity(0.14);
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: item.onTap,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            height: 54,
-            width: 54,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: bg,
-              border: Border.all(color: border),
-            ),
-            child: Icon(item.icon, color: iconColor, size: 26),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            item.label,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: Theme.of(
-              context,
-            ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -191,15 +214,12 @@ class _NewsTicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder(
+    return FutureBuilder<List<NewsModel>>(
       future: NewsService().getLatestNews(),
       builder: (context, snapshot) {
         String text = "Welcome to MSE Market Connect. Stay tuned for updates.";
-        if (snapshot.hasData) {
-          final items = snapshot.data!;
-          if (items.isNotEmpty) {
-            text = items.map((n) => "• ${n.title}").join("   ");
-          }
+        if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+          text = snapshot.data!.map((n) => "• ${n.title}").join("   ");
         }
         return Container(
           height: 40,
