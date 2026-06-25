@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mse_market_connect/core/services/mse_price_sync_service.dart';
+import 'package:mse_market_connect/core/services/news_sync_service.dart';
 
 class AdminSyncPricesScreen extends StatefulWidget {
   const AdminSyncPricesScreen({super.key});
@@ -9,43 +10,85 @@ class AdminSyncPricesScreen extends StatefulWidget {
 }
 
 class _AdminSyncPricesScreenState extends State<AdminSyncPricesScreen> {
-  final _svc = MsePriceSyncService();
-  bool _syncing = false;
+  final _prices = MsePriceSyncService();
+  final _news = NewsSyncService();
 
-  Future<void> _sync() async {
-    setState(() => _syncing = true);
+  bool _syncingPrices = false;
+  bool _syncingNews = false;
+
+  Future<void> _syncPrices() async {
+    setState(() => _syncingPrices = true);
     try {
-      final count = await _svc.syncMainboardPrices();
+      final count = await _prices.syncMainboardPrices();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Prices synced: $count stocks updated')),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Sync failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Price sync failed: $e')));
     } finally {
-      if (mounted) setState(() => _syncing = false);
+      if (mounted) setState(() => _syncingPrices = false);
+    }
+  }
+
+  Future<void> _syncNews() async {
+    setState(() => _syncingNews = true);
+    try {
+      final count = await _news.syncBusinessNews();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('News synced: $count articles added/updated')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('News sync failed: $e')));
+    } finally {
+      if (mounted) setState(() => _syncingNews = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Sync MSE Prices (Admin)')),
-      body: Padding(
+      appBar: AppBar(title: const Text('Admin Sync')),
+      body: ListView(
         padding: const EdgeInsets.all(16),
-        child: Card(
-          child: ListTile(
-            leading: _syncing
-                ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.sync),
-            title: const Text('Sync Mainboard Prices'),
-            subtitle: const Text('Fetch from mse.co.mw/market/mainboard and update Supabase stocks'),
-            onTap: _syncing ? null : _sync,
+        children: [
+          Card(
+            child: ListTile(
+              leading: _syncingPrices
+                  ? const SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.sync),
+              title: const Text('Sync MSE Prices'),
+              subtitle: const Text('Update stocks from MSE mainboard'),
+              onTap: _syncingPrices ? null : _syncPrices,
+            ),
           ),
-        ),
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: _syncingNews
+                  ? const SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.newspaper_outlined),
+              title: const Text('Sync Business News'),
+              subtitle: const Text('Fetch latest business news (GDELT)'),
+              onTap: _syncingNews ? null : _syncNews,
+            ),
+          ),
+        ],
       ),
     );
   }
