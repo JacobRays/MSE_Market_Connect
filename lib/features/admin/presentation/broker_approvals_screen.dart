@@ -101,7 +101,7 @@ class _BrokerApprovalsScreenState extends State<BrokerApprovalsScreen> {
             return ListView.separated(
               padding: const EdgeInsets.all(16),
               itemCount: pending.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, i) {
                 final r = pending[i];
                 final p = (r['profiles'] as Map<String, dynamic>?) ?? {};

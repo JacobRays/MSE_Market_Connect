@@ -4,9 +4,14 @@ import 'package:mse_market_connect/core/services/broker_user_service.dart';
 import 'package:mse_market_connect/core/services/profile_service.dart';
 import 'package:mse_market_connect/core/theme/app_theme.dart';
 import 'package:mse_market_connect/features/admin/presentation/admin_dashboard_screen.dart';
+import 'package:mse_market_connect/features/admin/presentation/broker_approvals_screen.dart';
+import 'package:mse_market_connect/features/admin/presentation/manage_ads_screen.dart';
+import 'package:mse_market_connect/features/admin/presentation/admin_sync_prices_screen.dart';
 import 'package:mse_market_connect/features/brokers/presentation/broker_dashboard_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/my_alerts_screen.dart';
 import 'package:mse_market_connect/features/notifications/presentation/notifications_screen.dart';
+import 'package:mse_market_connect/features/profile/presentation/settings_screen.dart';
+import 'package:mse_market_connect/features/profile/presentation/support_screen.dart';
 import 'package:mse_market_connect/shared/models/profile_model.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -161,6 +166,103 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Expanded(
                     child: ListView(
                       children: [
+                        // ===== ADMIN TOOLS (admin only) =====
+                        if (isAdmin) ...[
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              left: 4,
+                              bottom: 8,
+                              top: 4,
+                            ),
+                            child: Text(
+                              'Admin Tools',
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          Card(
+                            child: ListTile(
+                              leading: const Icon(Icons.campaign_outlined),
+                              title: const Text('Manage Adverts'),
+                              subtitle: const Text('Add, edit, remove banners'),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const ManageAdsScreen(),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Card(
+                            child: ListTile(
+                              leading: const Icon(Icons.verified_user_outlined),
+                              title: const Text('Approve Brokers'),
+                              subtitle: const Text(
+                                'Approve broker registrations',
+                              ),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const BrokerApprovalsScreen(),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Card(
+                            child: ListTile(
+                              leading: const Icon(
+                                Icons.admin_panel_settings_outlined,
+                              ),
+                              title: const Text('Admin Dashboard'),
+                              subtitle: const Text(
+                                'Subscriptions, premium, approvals',
+                              ),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const AdminDashboardScreen(),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Card(
+                            child: ListTile(
+                              leading: const Icon(Icons.sync),
+                              title: const Text('Sync MSE Data'),
+                              subtitle: const Text(
+                                'Prices and News from MSE/GDELT',
+                              ),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const AdminSyncPricesScreen(),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          const Divider(height: 24),
+                        ],
+
+                        // ===== SETTINGS =====
+                        Card(
+                          child: ListTile(
+                            leading: const Icon(Icons.settings_outlined),
+                            title: const Text('Settings'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const SettingsScreen(),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // ===== NOTIFICATIONS =====
                         Card(
                           child: ListTile(
                             leading: const Icon(
@@ -176,6 +278,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
+
+                        // ===== WATCHLIST =====
                         Card(
                           child: ListTile(
                             leading: const Icon(Icons.track_changes_outlined),
@@ -191,7 +295,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         const SizedBox(height: 12),
 
-                        // Broker dashboard (admin OR approved broker)
+                        // ===== SUPPORT =====
+                        Card(
+                          child: ListTile(
+                            leading: const Icon(Icons.support_agent_outlined),
+                            title: const Text('Help & Support'),
+                            subtitle: const Text('FAQs and contact support'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const SupportScreen(),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // ===== BROKER DASHBOARD (admin OR approved broker) =====
                         if (isAdmin || isApprovedBroker) ...[
                           Card(
                             child: ListTile(
@@ -208,28 +328,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               onTap: () => Navigator.of(context).push(
                                 MaterialPageRoute(
                                   builder: (_) => const BrokerDashboardScreen(),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-
-                        // Admin dashboard (admin only)
-                        if (isAdmin) ...[
-                          Card(
-                            child: ListTile(
-                              leading: const Icon(
-                                Icons.admin_panel_settings_outlined,
-                              ),
-                              title: const Text('Admin Dashboard'),
-                              subtitle: const Text(
-                                'Ads, premium requests, approvals',
-                              ),
-                              trailing: const Icon(Icons.chevron_right),
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const AdminDashboardScreen(),
                                 ),
                               ),
                             ),
