@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mse_market_connect/core/services/mse_price_sync_service.dart';
 import 'package:mse_market_connect/core/services/news_sync_service.dart';
@@ -54,11 +55,25 @@ class _AdminSyncPricesScreenState extends State<AdminSyncPricesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final disabled = kIsWeb;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Admin Sync')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (disabled)
+            Card(
+              color: Colors.amber.withOpacity(0.18),
+              child: const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  'Sync is disabled on Web preview.\n'
+                  'Install the Android APK and run Sync on your phone to fetch MSE prices.',
+                ),
+              ),
+            ),
+          const SizedBox(height: 12),
           Card(
             child: ListTile(
               leading: _syncingPrices
@@ -70,7 +85,7 @@ class _AdminSyncPricesScreenState extends State<AdminSyncPricesScreen> {
                   : const Icon(Icons.sync),
               title: const Text('Sync MSE Prices'),
               subtitle: const Text('Update stocks from MSE mainboard'),
-              onTap: _syncingPrices ? null : _syncPrices,
+              onTap: (disabled || _syncingPrices) ? null : _syncPrices,
             ),
           ),
           const SizedBox(height: 12),
@@ -85,7 +100,7 @@ class _AdminSyncPricesScreenState extends State<AdminSyncPricesScreen> {
                   : const Icon(Icons.newspaper_outlined),
               title: const Text('Sync Business News'),
               subtitle: const Text('Fetch latest business news (GDELT)'),
-              onTap: _syncingNews ? null : _syncNews,
+              onTap: (disabled || _syncingNews) ? null : _syncNews,
             ),
           ),
         ],

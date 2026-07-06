@@ -1,33 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:mse_market_connect/core/services/mse_sync_service.dart';
+import 'package:mse_market_connect/features/admin/presentation/admin_sync_prices_screen.dart';
+import 'package:mse_market_connect/features/admin/presentation/broker_approvals_screen.dart';
+import 'package:mse_market_connect/features/admin/presentation/manage_ads_screen.dart';
+import 'package:mse_market_connect/features/admin/presentation/manage_subscriptions_screen.dart';
+import 'package:mse_market_connect/features/admin/presentation/premium_requests_screen.dart';
 
-class AdminDashboardScreen extends StatefulWidget {
+class AdminDashboardScreen extends StatelessWidget {
   const AdminDashboardScreen({super.key});
-
-  @override
-  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
-}
-
-class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
-  final _syncService = MseSyncService();
-  bool _isSyncing = false;
-
-  Future<void> _handleSync() async {
-    setState(() => _isSyncing = true);
-    try {
-      final sCount = await _syncService.syncPrices();
-      final nCount = await _syncService.syncNews();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Sync Successful: $sCount stocks, $nCount news updated')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sync Error: $e')));
-    } finally {
-      if (mounted) setState(() => _isSyncing = false);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,24 +15,93 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // --- LIVE DATA ---
+          const Text(
+            'LIVE DATA',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+          ),
+          const SizedBox(height: 10),
           Card(
-            color: Colors.blue.shade50,
             child: ListTile(
-              leading: _isSyncing 
-                ? const CircularProgressIndicator() 
-                : const Icon(Icons.sync, color: Colors.blue),
-              title: const Text('Sync with MSE Website', style: TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: const Text('Fetch live prices and news from mse.co.mw'),
-              onTap: _isSyncing ? null : _handleSync,
+              leading: const Icon(Icons.sync),
+              title: const Text('Sync with MSE Website'),
+              subtitle: const Text('Fetch live prices and news'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AdminSyncPricesScreen(),
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 12),
-          const Divider(),
-          const ListTile(
-            title: Text('App Management'),
-            subtitle: Text('Manage Ads, User KYC, and Broker Requests'),
+          const SizedBox(height: 20),
+
+          // --- APP MANAGEMENT ---
+          const Text(
+            'APP MANAGEMENT',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
           ),
-          // Add your other admin tiles here...
+          const SizedBox(height: 10),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.campaign_outlined),
+              title: const Text('Manage Adverts'),
+              subtitle: const Text('Add, edit, remove banners'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ManageAdsScreen()),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.card_membership_outlined),
+              title: const Text('Manage Subscriptions'),
+              subtitle: const Text('View and manage user plans'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ManageSubscriptionsScreen(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.star_outline),
+              title: const Text('Premium Requests'),
+              subtitle: const Text('Approve premium upgrades'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const PremiumRequestsScreen(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // --- BROKER MANAGEMENT ---
+          const Text(
+            'BROKER MANAGEMENT',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.verified_user_outlined),
+              title: const Text('Approve Brokers'),
+              subtitle: const Text('Review broker registrations'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const BrokerApprovalsScreen(),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
