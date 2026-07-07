@@ -64,7 +64,7 @@ class _AdminSyncPricesScreenState extends State<AdminSyncPricesScreen> {
         children: [
           if (disabled)
             Card(
-              color: Colors.amber.withOpacity(0.18),
+              color: Colors.amber.withValues(alpha: 0.18),
               child: const Padding(
                 padding: EdgeInsets.all(16),
                 child: Text(
