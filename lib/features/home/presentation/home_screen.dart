@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mse_market_connect/core/services/ad_service.dart';
 import 'package:mse_market_connect/core/services/news_service.dart';
@@ -12,7 +14,7 @@ import 'package:mse_market_connect/features/profile/presentation/settings_screen
 import 'package:mse_market_connect/features/profile/presentation/support_screen.dart';
 import 'package:mse_market_connect/features/trade/presentation/my_orders_screen.dart';
 import 'package:mse_market_connect/shared/models/ad_model.dart';
-import 'package:mse_market_connect/shared/models/news_model.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -83,7 +85,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           context,
         ).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
       ),
-      // These appear only when expanded (after first 8)
+      // Extra actions shown only when expanded:
       _QuickActionItem(
         icon: Icons.support_agent_rounded,
         label: 'Support',
@@ -154,8 +156,8 @@ class _QuickActionsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final iconColor = AppTheme.primaryColor;
-    final bg = AppTheme.primaryColor.withValues(alpha: 0.08);
-    final border = AppTheme.primaryColor.withValues(alpha: 0.14);
+    final bg = AppTheme.primaryColor.withOpacity(0.08);
+    final border = AppTheme.primaryColor.withOpacity(0.14);
 
     return LayoutBuilder(
       builder: (context, c) {
@@ -209,43 +211,198 @@ class _QuickActionsGrid extends StatelessWidget {
   }
 }
 
-class _NewsTicker extends StatelessWidget {
+class _NewsTicker extends StatefulWidget {
   const _NewsTicker();
 
   @override
+  State<_NewsTicker> createState() => _NewsTickerState();
+}
+
+class _NewsTickerState extends State<_NewsTicker> {
+  final _db = Supabase.instance.client;
+  String _text = 'Welcome to MSE Market Connect. Stay tuned for updates.';
+  RealtimeChannel? _newsChannel;
+  RealtimeChannel? _stocksChannel;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    _listen();
+  }
+
+  @override
+  void dispose() {
+    if (_newsChannel != null) _db.removeChannel(_newsChannel!);
+    if (_stocksChannel != null) _db.removeChannel(_stocksChannel!);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final newsRes = await _db
+          .from('news')
+          .select('title')
+          .order('published_at', ascending: false)
+          .limit(10);
+
+      final stocksRes = await _db
+          .from('stocks')
+          .select('symbol, price, change_percent')
+          .eq('is_active', true)
+          .order('symbol', ascending: true)
+          .limit(16);
+
+      final newsTitles = (newsRes as List)
+          .map((r) => (r['title'] ?? '').toString().trim())
+          .where((t) => t.isNotEmpty)
+          .toList();
+
+      final prices = (stocksRes as List).map((r) {
+        final sym = (r['symbol'] ?? '').toString();
+        final price = (r['price'] as num?)?.toDouble() ?? 0.0;
+        final chg = (r['change_percent'] as num?)?.toDouble() ?? 0.0;
+        final sign = chg >= 0 ? '+' : '';
+        return '$sym MWK ${price.toStringAsFixed(2)} ($sign${chg.toStringAsFixed(2)}%)';
+      }).toList();
+
+      final parts = <String>[];
+      if (prices.isNotEmpty) parts.addAll(prices);
+      if (newsTitles.isNotEmpty) parts.addAll(newsTitles.map((t) => '• $t'));
+
+      if (!mounted) return;
+      setState(() {
+        _text = parts.isEmpty ? _text : parts.join('     ');
+      });
+    } catch (_) {
+      // keep current text
+    }
+  }
+
+  void _listen() {
+    _newsChannel = _db
+        .channel('ticker-news')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'news',
+          callback: (_) => _load(),
+        )
+        .subscribe();
+
+    _stocksChannel = _db
+        .channel('ticker-stocks')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'stocks',
+          callback: (_) => _load(),
+        )
+        .subscribe();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<NewsModel>>(
-      future: NewsService().getLatestNews(),
-      builder: (context, snapshot) {
-        String text = "Welcome to MSE Market Connect. Stay tuned for updates.";
-        if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-          text = snapshot.data!.map((n) => "• ${n.title}").join("   ");
+    return Container(
+      height: 44,
+      decoration: BoxDecoration(
+        color: AppTheme.primaryColor.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: _Marquee(text: _text),
+    );
+  }
+}
+
+class _Marquee extends StatefulWidget {
+  final String text;
+  const _Marquee({required this.text});
+
+  @override
+  State<_Marquee> createState() => _MarqueeState();
+}
+
+class _MarqueeState extends State<_Marquee> {
+  final _controller = ScrollController();
+  bool _running = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _start());
+  }
+
+  @override
+  void didUpdateWidget(covariant _Marquee oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text && _controller.hasClients) {
+      _controller.jumpTo(0);
+    }
+    if (!_running) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _start());
+    }
+  }
+
+  void _start() {
+    if (_running) return;
+    _running = true;
+
+    () async {
+      while (mounted) {
+        if (!_controller.hasClients) {
+          await Future.delayed(const Duration(milliseconds: 120));
+          continue;
         }
-        return Container(
-          height: 40,
-          decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  text,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: AppTheme.primaryColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
+
+        final max = _controller.position.maxScrollExtent;
+        if (max <= 0) {
+          await Future.delayed(const Duration(milliseconds: 200));
+          continue;
+        }
+
+        // Scroll duration based on content length (keeps consistent speed)
+        final ms = (max * 18).clamp(3500, 22000).toInt();
+
+        await _controller.animateTo(
+          max,
+          duration: Duration(milliseconds: ms),
+          curve: Curves.linear,
         );
-      },
+
+        if (!mounted) break;
+        _controller.jumpTo(0);
+        await Future.delayed(const Duration(milliseconds: 250));
+      }
+    }();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = '${widget.text}     ${widget.text}     ${widget.text}';
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: SingleChildScrollView(
+        controller: _controller,
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+              color: AppTheme.primaryColor,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
