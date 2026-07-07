@@ -361,7 +361,8 @@ class _MarqueeState extends State<_Marquee> {
         }
 
         // Scroll duration based on content length (keeps consistent speed)
-        final ms = (max * 18).clamp(3500, 22000).toInt();
+        const double pxPerSecond = 10.0;
+        final ms = ((max / pxPerSecond) * 1000).toInt().clamp(45000, 240000);
 
         await _controller.animateTo(
           max,
@@ -371,7 +372,7 @@ class _MarqueeState extends State<_Marquee> {
 
         if (!mounted) break;
         _controller.jumpTo(0);
-        await Future.delayed(const Duration(milliseconds: 250));
+        await Future.delayed(const Duration(milliseconds: 900));
       }
     }();
   }
