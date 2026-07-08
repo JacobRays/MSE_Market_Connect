@@ -19,6 +19,31 @@ class MsePriceSyncService {
     return int.tryParse(m.group(0)!) ?? 0;
   }
 
+  Future<void> _insertHistory(
+    List<Map<String, dynamic>> updates,
+    String recordedAt,
+  ) async {
+    // Write one history point per symbol per sync.
+    // Best-effort: if history table/policy is missing, do not fail the whole sync.
+    try {
+      final historyRows = updates.map((u) {
+        return <String, dynamic>{
+          'symbol': u['symbol'],
+          'price': u['price'],
+          'change_percent': u['change_percent'],
+          'volume': u['volume'],
+          'recorded_at': recordedAt,
+        };
+      }).toList();
+
+      await _db.from('stock_price_history').insert(historyRows);
+      debugPrint('Inserted ${historyRows.length} price history rows');
+    } catch (e, st) {
+      debugPrint('History insert skipped/failed: $e');
+      debugPrint('$st');
+    }
+  }
+
   Future<int> syncMainboardPrices() async {
     if (kIsWeb) {
       throw UnsupportedError(
@@ -104,6 +129,10 @@ class MsePriceSyncService {
     }
 
     await _db.from('stocks').upsert(updates, onConflict: 'symbol');
+
+    // Write history points (best-effort)
+    await _insertHistory(updates, now);
+
     return updates.length;
   }
 }
