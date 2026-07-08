@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:mse_market_connect/core/services/ad_service.dart';
-import 'package:mse_market_connect/core/services/news_service.dart';
 import 'package:mse_market_connect/core/theme/app_theme.dart';
 import 'package:mse_market_connect/features/brokers/presentation/broker_list_screen.dart';
 import 'package:mse_market_connect/features/learning/presentation/learning_screen.dart';
@@ -361,7 +360,7 @@ class _MarqueeState extends State<_Marquee> {
         }
 
         // Scroll duration based on content length (keeps consistent speed)
-        const double pxPerSecond = 10.0;
+        const double pxPerSecond = 7.0;
         final ms = ((max / pxPerSecond) * 1000).toInt().clamp(45000, 240000);
 
         await _controller.animateTo(
