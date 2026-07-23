@@ -172,11 +172,15 @@ class _MarketScreenState extends State<MarketScreen> {
   Widget build(BuildContext context) {
     final canShowToggle = !_loadingAlerts;
 
-    final visible = _view == MarketView.all
-        ? _stocks
-        : _stocks
-              .where((s) => _activeAlertBySymbol.containsKey(s.symbol))
-              .toList();
+    final watching = _stocks
+        .where((s) => _activeAlertBySymbol.containsKey(s.symbol))
+        .toList();
+    final gainers = _stocks.where((s) => s.changePercent > 0).toList()
+      ..sort((a, b) => b.changePercent.compareTo(a.changePercent));
+    final losers = _stocks.where((s) => s.changePercent < 0).toList()
+      ..sort((a, b) => a.changePercent.compareTo(b.changePercent));
+    final unchanged = _stocks.where((s) => s.changePercent == 0).toList()
+      ..sort((a, b) => a.symbol.compareTo(b.symbol));
 
     return Scaffold(
       appBar: AppBar(
@@ -242,206 +246,244 @@ class _MarketScreenState extends State<MarketScreen> {
                     ),
                     const SizedBox(height: 16),
                   ],
-                  if (visible.isEmpty) ...[
-                    const SizedBox(height: 60),
-                    const Icon(Icons.show_chart, size: 64),
-                    const SizedBox(height: 12),
-                    Text(
-                      _view == MarketView.watching
-                          ? 'You are not watching any companies yet.\nCreate a price target in Trade → Alert.'
-                          : 'No stocks available yet.',
-                      textAlign: TextAlign.center,
-                    ),
-                  ] else ...[
-                    ...visible.map((stock) {
-                      final alert = _activeAlertBySymbol[stock.symbol];
-                      final isPositive = stock.changePercent >= 0;
 
-                      final flash = _flashDir[stock.symbol] ?? 0;
-                      final flashColor = flash == 1
-                          ? AppTheme.gainColor.withValues(alpha: 0.10)
-                          : flash == -1
-                          ? AppTheme.lossColor.withValues(alpha: 0.10)
-                          : Colors.transparent;
-
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Card(
-                          clipBehavior: Clip.antiAlias,
-                          child: InkWell(
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => StockDetailScreen(stock: stock),
-                              ),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                16,
-                                14,
-                                12,
-                                14,
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  // Left: symbol + company + (alert)
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          stock.symbol,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleMedium
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.w800,
-                                              ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          stock.companyName,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.bodyMedium,
-                                        ),
-                                        if (alert != null) ...[
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            _watchLine(alert),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 12.5,
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-
-                                  const SizedBox(width: 10),
-
-                                  // Right: price + % change + trade
-                                  ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      minWidth: 110,
-                                      maxWidth: 200,
-                                    ),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        AnimatedContainer(
-                                          duration: const Duration(
-                                            milliseconds: 250,
-                                          ),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 6,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: flashColor,
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
-                                          ),
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.end,
-                                            children: [
-                                              AnimatedSwitcher(
-                                                duration: const Duration(
-                                                  milliseconds: 200,
-                                                ),
-                                                transitionBuilder:
-                                                    (child, anim) =>
-                                                        FadeTransition(
-                                                          opacity: anim,
-                                                          child: child,
-                                                        ),
-                                                child: Text(
-                                                  'MWK ${stock.price.toStringAsFixed(2)}',
-                                                  key: ValueKey(stock.price),
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .titleSmall
-                                                      ?.copyWith(
-                                                        fontWeight:
-                                                            FontWeight.w800,
-                                                      ),
-                                                ),
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Icon(
-                                                    isPositive
-                                                        ? Icons.arrow_upward
-                                                        : Icons.arrow_downward,
-                                                    size: 13,
-                                                    color: isPositive
-                                                        ? AppTheme.gainColor
-                                                        : AppTheme.lossColor,
-                                                  ),
-                                                  const SizedBox(width: 2),
-                                                  Text(
-                                                    '${isPositive ? '+' : ''}${stock.changePercent.toStringAsFixed(2)}%',
-                                                    style: TextStyle(
-                                                      color: isPositive
-                                                          ? AppTheme.gainColor
-                                                          : AppTheme.lossColor,
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                      fontSize: 12,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        SizedBox(
-                                          height: 32,
-                                          child: OutlinedButton(
-                                            onPressed: () =>
-                                                MarketActionSheet.show(
-                                                  context,
-                                                  stock,
-                                                ),
-                                            style: OutlinedButton.styleFrom(
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 12,
-                                                  ),
-                                            ),
-                                            child: const Text('Trade'),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
+                  if (_view == MarketView.watching) ...[
+                    if (watching.isEmpty) ...[
+                      const SizedBox(height: 60),
+                      const Icon(Icons.star, size: 64),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'You are not watching any companies yet.\nCreate a price target in Trade → Alert.',
+                        textAlign: TextAlign.center,
+                      ),
+                    ] else ...[
+                      ...watching.map(
+                        (s) => _StockCard(
+                          stock: s,
+                          alert: _activeAlertBySymbol[s.symbol],
+                          flashDir: _flashDir[s.symbol] ?? 0,
+                          onTrade: () => MarketActionSheet.show(context, s),
+                          onOpen: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => StockDetailScreen(stock: s),
                             ),
                           ),
                         ),
-                      );
-                    }),
+                      ),
+                    ],
+                  ] else ...[
+                    if (gainers.isNotEmpty) ...[
+                      _SectionHeader(title: 'Gainers'),
+                      const SizedBox(height: 8),
+                      ...gainers.map(
+                        (s) => _StockCard(
+                          stock: s,
+                          alert: _activeAlertBySymbol[s.symbol],
+                          flashDir: _flashDir[s.symbol] ?? 0,
+                          onTrade: () => MarketActionSheet.show(context, s),
+                          onOpen: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => StockDetailScreen(stock: s),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    if (losers.isNotEmpty) ...[
+                      _SectionHeader(title: 'Losers'),
+                      const SizedBox(height: 8),
+                      ...losers.map(
+                        (s) => _StockCard(
+                          stock: s,
+                          alert: _activeAlertBySymbol[s.symbol],
+                          flashDir: _flashDir[s.symbol] ?? 0,
+                          onTrade: () => MarketActionSheet.show(context, s),
+                          onOpen: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => StockDetailScreen(stock: s),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    if (unchanged.isNotEmpty) ...[
+                      _SectionHeader(title: 'Unchanged'),
+                      const SizedBox(height: 8),
+                      ...unchanged.map(
+                        (s) => _StockCard(
+                          stock: s,
+                          alert: _activeAlertBySymbol[s.symbol],
+                          flashDir: _flashDir[s.symbol] ?? 0,
+                          onTrade: () => MarketActionSheet.show(context, s),
+                          onOpen: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => StockDetailScreen(stock: s),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ],
               ),
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  const _SectionHeader({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: Theme.of(
+        context,
+      ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+    );
+  }
+}
+
+class _StockCard extends StatelessWidget {
+  final StockModel stock;
+  final PriceAlertModel? alert;
+  final int flashDir; // 1 up, -1 down
+  final VoidCallback onTrade;
+  final VoidCallback onOpen;
+
+  const _StockCard({
+    required this.stock,
+    required this.alert,
+    required this.flashDir,
+    required this.onTrade,
+    required this.onOpen,
+  });
+
+  String _watchLine(PriceAlertModel a) {
+    final isBuy = a.alertType == 'buy';
+    return isBuy
+        ? 'Watching: BUY when price ≤ MWK ${a.targetPrice.toStringAsFixed(2)}'
+        : 'Watching: SELL when price ≥ MWK ${a.targetPrice.toStringAsFixed(2)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isPositive = stock.changePercent >= 0;
+    final flashColor = flashDir == 1
+        ? AppTheme.gainColor.withValues(alpha: 0.10)
+        : flashDir == -1
+        ? AppTheme.lossColor.withValues(alpha: 0.10)
+        : Colors.transparent;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onOpen,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        stock.symbol,
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        stock.companyName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (alert != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          _watchLine(alert!),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 250),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: flashColor,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'MWK ${stock.price.toStringAsFixed(2)}',
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                isPositive
+                                    ? Icons.arrow_upward
+                                    : Icons.arrow_downward,
+                                size: 13,
+                                color: isPositive
+                                    ? AppTheme.gainColor
+                                    : AppTheme.lossColor,
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                '${isPositive ? '+' : ''}${stock.changePercent.toStringAsFixed(2)}%',
+                                style: TextStyle(
+                                  color: isPositive
+                                      ? AppTheme.gainColor
+                                      : AppTheme.lossColor,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 32,
+                      child: OutlinedButton(
+                        onPressed: onTrade,
+                        style: OutlinedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                        ),
+                        child: const Text('Trade'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

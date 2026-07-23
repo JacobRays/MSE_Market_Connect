@@ -25,15 +25,38 @@ class _ManageAdsScreenState extends State<ManageAdsScreen> {
     await _future;
   }
 
+  Future<bool> _confirmDelete() async {
+    final ok =
+        await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Delete advert?'),
+            content: const Text('This cannot be undone.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    return ok;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Manage Adverts')),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
-          await Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const AdEditorScreen()),
-          );
+          await Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const AdEditorScreen()));
           if (!mounted) return;
           await _refresh();
         },
@@ -44,7 +67,7 @@ class _ManageAdsScreenState extends State<ManageAdsScreen> {
         child: FutureBuilder<List<AdModel>>(
           future: _future,
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
+            if (snapshot.connectionState != ConnectionState.done) {
               return const Center(child: CircularProgressIndicator());
             }
             if (snapshot.hasError) {
@@ -74,20 +97,51 @@ class _ManageAdsScreenState extends State<ManageAdsScreen> {
               separatorBuilder: (context, index) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final ad = ads[index];
-                return Card(
-                  child: ListTile(
-                    title: Text(ad.title),
-                    subtitle: Text(
-                      'Priority: ${ad.priority}  •  ${ad.isActive ? "Active" : "Inactive"}',
+
+                return Dismissible(
+                  key: ValueKey(ad.id),
+                  direction: DismissDirection.endToStart,
+                  confirmDismiss: (_) => _confirmDelete(),
+                  onDismissed: (_) async {
+                    await _service.deleteAd(ad.id);
+                    await _refresh();
+                  },
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade600,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () async {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => AdEditorScreen(existing: ad)),
-                      );
-                      if (!mounted) return;
-                      await _refresh();
-                    },
+                    child: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.white,
+                    ),
+                  ),
+                  child: Card(
+                    child: ListTile(
+                      title: Text(ad.title),
+                      subtitle: Text(
+                        'Priority: ${ad.priority}  •  ${ad.isActive ? "Active" : "Inactive"}',
+                      ),
+                      leading: Switch(
+                        value: ad.isActive,
+                        onChanged: (v) async {
+                          await _service.setActive(id: ad.id, isActive: v);
+                          await _refresh();
+                        },
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => AdEditorScreen(existing: ad),
+                          ),
+                        );
+                        if (!mounted) return;
+                        await _refresh();
+                      },
+                    ),
                   ),
                 );
               },

@@ -19,12 +19,15 @@ class MsePriceSyncService {
     return int.tryParse(m.group(0)!) ?? 0;
   }
 
+  double _computeChangePct({required double open, required double close}) {
+    if (open <= 0) return 0.0;
+    return ((close - open) / open) * 100.0;
+  }
+
   Future<void> _insertHistory(
     List<Map<String, dynamic>> updates,
     String recordedAt,
   ) async {
-    // Write one history point per symbol per sync.
-    // Best-effort: if history table/policy is missing, do not fail the whole sync.
     try {
       final historyRows = updates.map((u) {
         return <String, dynamic>{
@@ -37,8 +40,9 @@ class MsePriceSyncService {
       }).toList();
 
       await _db.from('stock_price_history').insert(historyRows);
-      debugPrint('Inserted ${historyRows.length} price history rows');
+      debugPrint('Inserted ${historyRows.length} history rows');
     } catch (e, st) {
+      // Best-effort: do not fail the sync if history insert fails
       debugPrint('History insert skipped/failed: $e');
       debugPrint('$st');
     }
@@ -51,7 +55,6 @@ class MsePriceSyncService {
       );
     }
 
-    // Update only symbols that exist (prevents missing required cols like company_name)
     final existing = await _db.from('stocks').select('symbol');
     final existingSymbols = (existing as List)
         .map((r) => (r['symbol'] ?? '').toString().toUpperCase().trim())
@@ -109,7 +112,20 @@ class MsePriceSyncService {
 
       final openPrice = _num(cols[1].text);
       final closePrice = _num(cols[2].text);
-      final changePercent = _num(cols[3].text);
+
+      // MSE column sometimes comes as 0 even when open/close differ.
+      final parsedChange = _num(cols[3].text);
+      final computedChange = _computeChangePct(
+        open: openPrice,
+        close: closePrice,
+      );
+
+      // Use computed if parsed is essentially zero but open/close indicate movement.
+      final changePercent =
+          (parsedChange.abs() < 0.000001 && computedChange.abs() > 0.000001)
+          ? computedChange
+          : parsedChange;
+
       final volume = _int(cols[4].text);
       final turnover = cols.length >= 6 ? _num(cols[5].text) : 0.0;
 
@@ -129,8 +145,6 @@ class MsePriceSyncService {
     }
 
     await _db.from('stocks').upsert(updates, onConflict: 'symbol');
-
-    // Write history points (best-effort)
     await _insertHistory(updates, now);
 
     return updates.length;

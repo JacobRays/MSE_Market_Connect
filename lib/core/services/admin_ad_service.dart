@@ -5,19 +5,18 @@ class AdminAdService {
   final SupabaseClient _client = Supabase.instance.client;
 
   Future<List<AdModel>> getAllAds() async {
-    final response = await _client
+    final res = await _client
         .from('ads')
         .select()
         .order('priority', ascending: false)
         .order('created_at', ascending: false);
 
-    return (response as List)
+    return (res as List)
         .map((e) => AdModel.fromMap(e as Map<String, dynamic>))
         .toList();
   }
 
-  Future<void> upsertAd({
-    int? id,
+  Future<void> createAd({
     required String title,
     String? subtitle,
     String? imageUrl,
@@ -25,17 +24,40 @@ class AdminAdService {
     required bool isActive,
     required int priority,
   }) async {
-    final payload = <String, dynamic>{
+    await _client.from('ads').insert({
       'title': title,
       'subtitle': subtitle,
       'image_url': imageUrl,
       'action_url': actionUrl,
       'is_active': isActive,
       'priority': priority,
-      ...?(id == null ? null : <String, dynamic>{'id': id}),
-    };
+    });
+  }
 
-    await _client.from('ads').upsert(payload, onConflict: 'id');
+  Future<void> updateAd({
+    required int id,
+    required String title,
+    String? subtitle,
+    String? imageUrl,
+    String? actionUrl,
+    required bool isActive,
+    required int priority,
+  }) async {
+    await _client
+        .from('ads')
+        .update({
+          'title': title,
+          'subtitle': subtitle,
+          'image_url': imageUrl,
+          'action_url': actionUrl,
+          'is_active': isActive,
+          'priority': priority,
+        })
+        .eq('id', id);
+  }
+
+  Future<void> setActive({required int id, required bool isActive}) async {
+    await _client.from('ads').update({'is_active': isActive}).eq('id', id);
   }
 
   Future<void> deleteAd(int id) async {
