@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:mse_market_connect/core/services/ad_service.dart';
@@ -12,8 +13,8 @@ import 'package:mse_market_connect/features/portfolio/presentation/portfolio_scr
 import 'package:mse_market_connect/features/profile/presentation/settings_screen.dart';
 import 'package:mse_market_connect/features/profile/presentation/support_screen.dart';
 import 'package:mse_market_connect/features/trade/presentation/my_orders_screen.dart';
-
 import 'package:mse_market_connect/features/home/presentation/widgets/ad_carousel.dart';
+import 'package:mse_market_connect/shared/models/ad_model.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -85,7 +86,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           context,
         ).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
       ),
-      // Extra actions shown only when expanded:
+      // Extra actions (appear after expand)
       _QuickActionItem(
         icon: Icons.support_agent_rounded,
         label: 'Support',
@@ -107,7 +108,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             const SizedBox(height: 14),
             const _AdPanel(),
             const SizedBox(height: 18),
-
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -124,7 +124,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ],
             ),
             const SizedBox(height: 10),
-
             AnimatedSize(
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeInOut,
@@ -156,8 +155,8 @@ class _QuickActionsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final iconColor = AppTheme.primaryColor;
-    final bg = AppTheme.primaryColor.withValues(alpha: 0.08);
-    final border = AppTheme.primaryColor.withValues(alpha: 0.14);
+    final bg = AppTheme.primaryColor.withOpacity(0.08);
+    final border = AppTheme.primaryColor.withOpacity(0.14);
 
     return LayoutBuilder(
       builder: (context, c) {
@@ -206,6 +205,21 @@ class _QuickActionsGrid extends StatelessWidget {
             );
           },
         );
+      },
+    );
+  }
+}
+
+class _AdPanel extends StatelessWidget {
+  const _AdPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<AdModel>>(
+      future: AdService().getActiveAds(limit: 5),
+      builder: (context, snapshot) {
+        final ads = snapshot.data ?? const <AdModel>[];
+        return AdCarousel(ads: ads, hideMissingImages: true);
       },
     );
   }
@@ -274,9 +288,7 @@ class _NewsTickerState extends State<_NewsTicker> {
       setState(() {
         _text = parts.isEmpty ? _text : parts.join('     ');
       });
-    } catch (_) {
-      // keep current text
-    }
+    } catch (_) {}
   }
 
   void _listen() {
@@ -306,7 +318,7 @@ class _NewsTickerState extends State<_NewsTicker> {
     return Container(
       height: 44,
       decoration: BoxDecoration(
-        color: AppTheme.primaryColor.withValues(alpha: 0.06),
+        color: AppTheme.primaryColor.withOpacity(0.06),
         borderRadius: BorderRadius.circular(10),
       ),
       child: _Marquee(text: _text),
@@ -360,7 +372,7 @@ class _MarqueeState extends State<_Marquee> {
           continue;
         }
 
-        // Scroll duration based on content length (keeps consistent speed)
+        // Slow readable speed (px per second)
         const double pxPerSecond = 7.0;
         final ms = ((max / pxPerSecond) * 1000).toInt().clamp(45000, 240000);
 
@@ -385,6 +397,7 @@ class _MarqueeState extends State<_Marquee> {
 
   @override
   Widget build(BuildContext context) {
+    // repeat text to avoid blank gap
     final text = '${widget.text}     ${widget.text}     ${widget.text}';
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
@@ -404,171 +417,6 @@ class _MarqueeState extends State<_Marquee> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _AdPanel extends StatelessWidget {
-  const _AdPanel();
-
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<AdModel>>(
-      future: AdService().getActiveAds(limit: 5),
-      builder: (context, snapshot) {
-        final ads = snapshot.data ?? [];
-        return AdCarousel(ads: ads, hideMissingImages: true);
-      },
-    );
-  }
-}
-
-class _AdCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final String? imageUrl;
-  const _AdCard({required this.title, required this.subtitle, this.imageUrl});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: (imageUrl != null && imageUrl!.isNotEmpty)
-                ? Image.network(
-                    imageUrl!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (c, e, s) =>
-                        Container(color: AppTheme.primaryColor),
-                  )
-                : Container(color: AppTheme.primaryColor),
-          ),
-          Container(color: Colors.black38),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-                Text(subtitle, style: const TextStyle(color: Colors.white70)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AdCarousel extends StatefulWidget {
-  final List<AdModel> ads;
-  const _AdCarousel({required this.ads});
-
-  @override
-  State<_AdCarousel> createState() => _AdCarouselState();
-}
-
-class _AdCarouselState extends State<_AdCarousel> {
-  late final PageController _controller;
-  Timer? _timer;
-  int _index = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = PageController();
-    _restartAutoSlide();
-  }
-
-  @override
-  void didUpdateWidget(covariant _AdCarousel oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.ads.length != widget.ads.length) {
-      _index = 0;
-      if (_controller.hasClients) {
-        _controller.jumpToPage(0);
-      }
-      _restartAutoSlide();
-    }
-  }
-
-  void _restartAutoSlide() {
-    _timer?.cancel();
-    if (widget.ads.length <= 1) return;
-
-    _timer = Timer.periodic(const Duration(seconds: 6), (_) {
-      if (!mounted) return;
-      if (!_controller.hasClients) return;
-      if (widget.ads.isEmpty) return;
-
-      _index = (_index + 1) % widget.ads.length;
-      _controller.animateToPage(
-        _index,
-        duration: const Duration(milliseconds: 450),
-        curve: Curves.easeInOut,
-      );
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ads = widget.ads;
-
-    return Column(
-      children: [
-        SizedBox(
-          height: 180,
-          child: PageView.builder(
-            controller: _controller,
-            itemCount: ads.length,
-            onPageChanged: (i) => setState(() => _index = i),
-            itemBuilder: (context, i) => _AdCard(
-              title: ads[i].title,
-              subtitle: ads[i].subtitle ?? 'Sponsored',
-              imageUrl: ads[i].imageUrl,
-            ),
-          ),
-        ),
-        if (ads.length > 1) ...[
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(ads.length, (i) {
-              final active = i == _index;
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                margin: const EdgeInsets.symmetric(horizontal: 3),
-                height: 6,
-                width: active ? 18 : 6,
-                decoration: BoxDecoration(
-                  color: active
-                      ? AppTheme.primaryColor
-                      : AppTheme.primaryColor.withValues(alpha: 0.25),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              );
-            }),
-          ),
-        ],
-      ],
     );
   }
 }
