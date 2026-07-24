@@ -423,17 +423,7 @@ class _AdPanel extends StatelessWidget {
             imageUrl: null,
           );
         }
-        return SizedBox(
-          height: 180,
-          child: PageView.builder(
-            itemCount: ads.length,
-            itemBuilder: (context, index) => _AdCard(
-              title: ads[index].title,
-              subtitle: ads[index].subtitle ?? 'Sponsored',
-              imageUrl: ads[index].imageUrl,
-            ),
-          ),
-        );
+        return _AdCarousel(ads: ads);
       },
     );
   }
@@ -484,6 +474,108 @@ class _AdCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _AdCarousel extends StatefulWidget {
+  final List<AdModel> ads;
+  const _AdCarousel({required this.ads});
+
+  @override
+  State<_AdCarousel> createState() => _AdCarouselState();
+}
+
+class _AdCarouselState extends State<_AdCarousel> {
+  late final PageController _controller;
+  Timer? _timer;
+  int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = PageController();
+    _restartAutoSlide();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AdCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.ads.length != widget.ads.length) {
+      _index = 0;
+      if (_controller.hasClients) {
+        _controller.jumpToPage(0);
+      }
+      _restartAutoSlide();
+    }
+  }
+
+  void _restartAutoSlide() {
+    _timer?.cancel();
+    if (widget.ads.length <= 1) return;
+
+    _timer = Timer.periodic(const Duration(seconds: 6), (_) {
+      if (!mounted) return;
+      if (!_controller.hasClients) return;
+      if (widget.ads.isEmpty) return;
+
+      _index = (_index + 1) % widget.ads.length;
+      _controller.animateToPage(
+        _index,
+        duration: const Duration(milliseconds: 450),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ads = widget.ads;
+
+    return Column(
+      children: [
+        SizedBox(
+          height: 180,
+          child: PageView.builder(
+            controller: _controller,
+            itemCount: ads.length,
+            onPageChanged: (i) => setState(() => _index = i),
+            itemBuilder: (context, i) => _AdCard(
+              title: ads[i].title,
+              subtitle: ads[i].subtitle ?? 'Sponsored',
+              imageUrl: ads[i].imageUrl,
+            ),
+          ),
+        ),
+        if (ads.length > 1) ...[
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(ads.length, (i) {
+              final active = i == _index;
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                height: 6,
+                width: active ? 18 : 6,
+                decoration: BoxDecoration(
+                  color: active
+                      ? AppTheme.primaryColor
+                      : AppTheme.primaryColor.withOpacity(0.25),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              );
+            }),
+          ),
+        ],
+      ],
     );
   }
 }
