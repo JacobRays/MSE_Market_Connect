@@ -12,7 +12,8 @@ import 'package:mse_market_connect/features/portfolio/presentation/portfolio_scr
 import 'package:mse_market_connect/features/profile/presentation/settings_screen.dart';
 import 'package:mse_market_connect/features/profile/presentation/support_screen.dart';
 import 'package:mse_market_connect/features/trade/presentation/my_orders_screen.dart';
-import 'package:mse_market_connect/shared/models/ad_model.dart';
+
+import 'package:mse_market_connect/features/home/presentation/widgets/ad_carousel.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -410,20 +411,12 @@ class _MarqueeState extends State<_Marquee> {
 class _AdPanel extends StatelessWidget {
   const _AdPanel();
 
-  @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<AdModel>>(
       future: AdService().getActiveAds(limit: 5),
       builder: (context, snapshot) {
         final ads = snapshot.data ?? [];
-        if (ads.isEmpty) {
-          return const _AdCard(
-            title: 'Advertise Here',
-            subtitle: 'Reach all MSE investors',
-            imageUrl: null,
-          );
-        }
-        return _AdCarousel(ads: ads);
+        return AdCarousel(ads: ads, hideMissingImages: true);
       },
     );
   }
@@ -568,7 +561,7 @@ class _AdCarouselState extends State<_AdCarousel> {
                 decoration: BoxDecoration(
                   color: active
                       ? AppTheme.primaryColor
-                      : AppTheme.primaryColor.withOpacity(0.25),
+                      : AppTheme.primaryColor.withValues(alpha: 0.25),
                   borderRadius: BorderRadius.circular(999),
                 ),
               );

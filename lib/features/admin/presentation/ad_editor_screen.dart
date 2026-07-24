@@ -188,7 +188,7 @@ class _AdEditorScreenState extends State<AdEditorScreen> {
                 height: 160,
                 width: double.infinity,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const Padding(
+                errorBuilder: (_, _, _) => const Padding(
                   padding: EdgeInsets.all(16),
                   child: Text('Image preview failed. Check the URL.'),
                 ),
