@@ -155,8 +155,8 @@ class _QuickActionsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final iconColor = AppTheme.primaryColor;
-    final bg = AppTheme.primaryColor.withOpacity(0.08);
-    final border = AppTheme.primaryColor.withOpacity(0.14);
+    final bg = AppTheme.primaryColor.withValues(alpha: 0.08);
+    final border = AppTheme.primaryColor.withValues(alpha: 0.14);
 
     return LayoutBuilder(
       builder: (context, c) {
@@ -318,7 +318,7 @@ class _NewsTickerState extends State<_NewsTicker> {
     return Container(
       height: 44,
       decoration: BoxDecoration(
-        color: AppTheme.primaryColor.withOpacity(0.06),
+        color: Colors.white.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(10),
       ),
       child: _Marquee(text: _text),
@@ -412,7 +412,7 @@ class _MarqueeState extends State<_Marquee> {
             style: const TextStyle(
               fontWeight: FontWeight.w800,
               fontSize: 13,
-              color: AppTheme.primaryColor,
+              color: Colors.white,
             ),
           ),
         ),
