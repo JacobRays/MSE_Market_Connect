@@ -18,9 +18,8 @@ class BrokerDetailScreen extends StatelessWidget {
   Uri? _safeUri(String? url) {
     final u = (url ?? '').trim();
     if (u.isEmpty) return null;
-    if (u.startsWith('http://') || u.startsWith('https://')) {
+    if (u.startsWith('http://') || u.startsWith('https://'))
       return Uri.parse(u);
-    }
     return Uri.parse('https://$u');
   }
 
@@ -45,7 +44,9 @@ class BrokerDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final phone = (broker.phone ?? '').trim();
+    final altPhone = (broker.altPhone ?? '').trim();
     final email = (broker.email ?? '').trim();
+    final altEmail = (broker.altEmail ?? '').trim();
     final websiteUri = _safeUri(broker.website);
     final address = (broker.address ?? '').trim();
     final whatsappDigits = (broker.whatsapp ?? '')
@@ -90,15 +91,9 @@ class BrokerDetailScreen extends StatelessWidget {
                         label:
                             'Fee ${(broker.feeRate * 100).toStringAsFixed(2)}%',
                       ),
-                      if ((broker.licenseNo ?? '').trim().isNotEmpty)
-                        _Chip(label: 'License ${broker.licenseNo!.trim()}'),
                       _Chip(label: broker.isActive ? 'Active' : 'Inactive'),
                     ],
                   ),
-                  if ((broker.officeHours ?? '').trim().isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Text('Office hours: ${broker.officeHours!.trim()}'),
-                  ],
                 ],
               ),
             ),
@@ -112,7 +107,6 @@ class BrokerDetailScreen extends StatelessWidget {
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 8),
-
           Card(
             child: Column(
               children: [
@@ -133,6 +127,22 @@ class BrokerDetailScreen extends StatelessWidget {
                       ? null
                       : () => _copy(context, phone, 'Phone'),
                 ),
+                if (altPhone.isNotEmpty) ...[
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.call_outlined),
+                    title: const Text('Alt phone'),
+                    subtitle: Text(altPhone),
+                    trailing: const Icon(Icons.open_in_new),
+                    onTap: () => _open(
+                      context,
+                      Uri.parse('tel:$altPhone'),
+                      fallbackCopy: altPhone,
+                      label: 'Alt phone',
+                    ),
+                    onLongPress: () => _copy(context, altPhone, 'Alt phone'),
+                  ),
+                ],
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.chat_outlined),
@@ -145,7 +155,7 @@ class BrokerDetailScreen extends StatelessWidget {
                       ? null
                       : () => _open(
                           context,
-                          waUri,
+                          waUri!,
                           fallbackCopy: whatsappDigits,
                           label: 'WhatsApp',
                         ),
@@ -171,6 +181,22 @@ class BrokerDetailScreen extends StatelessWidget {
                       ? null
                       : () => _copy(context, email, 'Email'),
                 ),
+                if (altEmail.isNotEmpty) ...[
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.email_outlined),
+                    title: const Text('Alt email'),
+                    subtitle: Text(altEmail),
+                    trailing: const Icon(Icons.open_in_new),
+                    onTap: () => _open(
+                      context,
+                      Uri.parse('mailto:$altEmail'),
+                      fallbackCopy: altEmail,
+                      label: 'Alt email',
+                    ),
+                    onLongPress: () => _copy(context, altEmail, 'Alt email'),
+                  ),
+                ],
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.language_outlined),
@@ -183,7 +209,7 @@ class BrokerDetailScreen extends StatelessWidget {
                       ? null
                       : () => _open(
                           context,
-                          websiteUri,
+                          websiteUri!,
                           fallbackCopy: websiteUri.toString(),
                           label: 'Website',
                         ),
@@ -192,8 +218,8 @@ class BrokerDetailScreen extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 12),
           if (address.isNotEmpty) ...[
+            const SizedBox(height: 12),
             Text(
               'Address',
               style: Theme.of(
@@ -212,19 +238,19 @@ class BrokerDetailScreen extends StatelessWidget {
                     ? null
                     : () => _open(
                         context,
-                        mapsUri,
+                        mapsUri!,
                         fallbackCopy: address,
                         label: 'Address',
                       ),
                 onLongPress: () => _copy(context, address, 'Address'),
               ),
             ),
-            const SizedBox(height: 12),
           ],
 
           if ((broker.bankInstructions ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 12),
             Text(
-              'Bank / Settlement Instructions',
+              'Notes',
               style: Theme.of(
                 context,
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
@@ -252,7 +278,7 @@ class _Chip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.05),
+        color: Colors.black.withOpacity(0.05),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
