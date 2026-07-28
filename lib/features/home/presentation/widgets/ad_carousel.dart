@@ -116,7 +116,7 @@ class _AdCarouselState extends State<AdCarousel> {
                 decoration: BoxDecoration(
                   color: active
                       ? AppTheme.primaryColor
-                      : AppTheme.primaryColor.withOpacity(0.25),
+                      : AppTheme.primaryColor.withValues(alpha: 0.25),
                   borderRadius: BorderRadius.circular(999),
                 ),
               );
