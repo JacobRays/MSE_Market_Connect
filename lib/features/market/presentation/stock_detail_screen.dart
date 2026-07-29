@@ -6,6 +6,7 @@ import 'package:mse_market_connect/features/market/presentation/set_price_alert_
 import 'package:mse_market_connect/features/trade/presentation/buy_order_screen.dart';
 import 'package:mse_market_connect/shared/models/stock_model.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class StockDetailScreen extends StatefulWidget {
   final StockModel stock;
@@ -19,12 +20,14 @@ class StockDetailScreen extends StatefulWidget {
 class _StockDetailScreenState extends State<StockDetailScreen> {
   late StockModel _stock;
   late Future<List<_HistoryPoint>> _historyFuture;
+  late Future<Map<String, dynamic>?> _profileFuture;
 
   @override
   void initState() {
     super.initState();
     _stock = widget.stock;
     _historyFuture = _loadHistory();
+    _profileFuture = _loadCompanyProfile();
   }
 
   Future<List<_HistoryPoint>> _loadHistory() async {
@@ -45,22 +48,34 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
       return _HistoryPoint(price: price, recordedAt: recordedAt);
     }).toList();
 
-    // reverse to chronological order
-    return pts.reversed.toList();
+    return pts.reversed.toList(); // chronological
+  }
+
+  Future<Map<String, dynamic>?> _loadCompanyProfile() async {
+    final db = Supabase.instance.client;
+
+    final row = await db
+        .from('stock_company_profiles')
+        .select()
+        .eq('symbol', _stock.symbol)
+        .maybeSingle();
+
+    if (row == null) return null;
+    return row as Map<String, dynamic>;
   }
 
   Future<void> _refresh() async {
     setState(() {
       _historyFuture = _loadHistory();
+      _profileFuture = _loadCompanyProfile();
     });
-    await _historyFuture;
 
-    // Refresh the live stock row too (so detail matches latest)
+    // Refresh the live stock row too
     final db = Supabase.instance.client;
     final row = await db
         .from('stocks')
         .select(
-          'id, symbol, company_name, price, change_percent, volume, is_active, updated_at',
+          'id, symbol, company_name, price, change_percent, volume, is_active, updated_at, logo_url',
         )
         .eq('symbol', _stock.symbol)
         .maybeSingle();
@@ -68,9 +83,31 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     if (!mounted) return;
     if (row != null) {
       setState(() {
-        _stock = StockModel.fromMap(row);
+        _stock = StockModel.fromMap(row as Map<String, dynamic>);
       });
     }
+  }
+
+  Future<void> _openExternal(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  String _asString(Map<String, dynamic> p, String key) =>
+      (p[key] ?? '').toString().trim();
+
+  DateTime? _asDate(Map<String, dynamic> p, String key) {
+    final v = p[key];
+    if (v == null) return null;
+    return DateTime.tryParse(v.toString());
+  }
+
+  double? _asDouble(Map<String, dynamic> p, String key) {
+    final v = p[key];
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString());
   }
 
   @override
@@ -205,8 +242,8 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                             child: _Sparkline(
                               values: values,
                               lineColor: AppTheme.primaryColor,
-                              fillColor: AppTheme.primaryColor.withValues(
-                                alpha: 0.10,
+                              fillColor: AppTheme.primaryColor.withOpacity(
+                                0.10,
                               ),
                             ),
                           ),
@@ -229,6 +266,160 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                               ),
                             ],
                           ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // --- Company profile (from stock_company_profiles) ---
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: FutureBuilder<Map<String, dynamic>?>(
+                    future: _profileFuture,
+                    builder: (context, snap) {
+                      if (snap.connectionState != ConnectionState.done) {
+                        return const SizedBox(
+                          height: 90,
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+                      if (snap.hasError) {
+                        return Text(
+                          'Failed to load company profile:\n${snap.error}',
+                        );
+                      }
+
+                      final p = snap.data;
+                      if (p == null) {
+                        return const Text('Company profile not available yet.');
+                      }
+
+                      final isin = _asString(p, 'isin');
+                      final hq = _asString(p, 'hq_address');
+                      final phone = _asString(p, 'phone');
+                      final email = _asString(p, 'email');
+                      final website = _asString(p, 'website');
+
+                      final ceo = _asString(p, 'ceo');
+                      final cfo = _asString(p, 'cfo');
+                      final sec = _asString(p, 'company_secretary');
+
+                      final ts = _asString(p, 'transfer_secretary');
+                      final tsAddr = _asString(p, 'transfer_address');
+                      final tsPhone = _asString(p, 'transfer_phone');
+                      final tsEmail = _asString(p, 'transfer_email');
+                      final tsWeb = _asString(p, 'transfer_website');
+
+                      final listingDate = _asDate(p, 'listing_date');
+                      final shares = _asDouble(p, 'shares_in_issue');
+                      final listingPrice = _asDouble(p, 'listing_price');
+
+                      String fmtDate(DateTime? d) {
+                        if (d == null) return '';
+                        final loc = MaterialLocalizations.of(context);
+                        return loc.formatShortDate(d.toLocal());
+                      }
+
+                      Widget linkTile({
+                        required IconData icon,
+                        required String label,
+                        required String value,
+                        required String url,
+                      }) {
+                        if (value.isEmpty) return const SizedBox.shrink();
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(icon),
+                          title: Text(label),
+                          subtitle: Text(value),
+                          trailing: const Icon(Icons.open_in_new),
+                          onTap: () => _openExternal(url),
+                        );
+                      }
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Company Profile',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 10),
+
+                          if (isin.isNotEmpty) _KV(label: 'ISIN', value: isin),
+                          if (hq.isNotEmpty)
+                            _KV(label: 'Head Office', value: hq),
+
+                          if (phone.isNotEmpty)
+                            linkTile(
+                              icon: Icons.call_outlined,
+                              label: 'Phone',
+                              value: phone,
+                              url: 'tel:$phone',
+                            ),
+                          if (email.isNotEmpty)
+                            linkTile(
+                              icon: Icons.email_outlined,
+                              label: 'Email',
+                              value: email,
+                              url: 'mailto:$email',
+                            ),
+                          if (website.isNotEmpty)
+                            linkTile(
+                              icon: Icons.language_outlined,
+                              label: 'Website',
+                              value: website,
+                              url: website.startsWith('http')
+                                  ? website
+                                  : 'https://$website',
+                            ),
+
+                          const SizedBox(height: 6),
+                          if (ceo.isNotEmpty) _KV(label: 'MD/CEO', value: ceo),
+                          if (cfo.isNotEmpty) _KV(label: 'DOF/CFO', value: cfo),
+                          if (sec.isNotEmpty)
+                            _KV(label: 'Company Secretary', value: sec),
+
+                          const SizedBox(height: 10),
+                          if (ts.isNotEmpty)
+                            Text(
+                              'Transfer Secretary',
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                          if (ts.isNotEmpty) const SizedBox(height: 6),
+                          if (ts.isNotEmpty) _KV(label: 'Name', value: ts),
+                          if (tsAddr.isNotEmpty)
+                            _KV(label: 'Address', value: tsAddr),
+                          if (tsPhone.isNotEmpty)
+                            _KV(label: 'Phone', value: tsPhone),
+                          if (tsEmail.isNotEmpty)
+                            _KV(label: 'Email', value: tsEmail),
+                          if (tsWeb.isNotEmpty)
+                            _KV(label: 'Website', value: tsWeb),
+
+                          const SizedBox(height: 10),
+                          if (listingDate != null)
+                            _KV(
+                              label: 'Listing Date',
+                              value: fmtDate(listingDate),
+                            ),
+                          if (shares != null)
+                            _KV(
+                              label: 'Shares In Issue',
+                              value: shares.toStringAsFixed(0),
+                            ),
+                          if (listingPrice != null)
+                            _KV(
+                              label: 'Listing Price',
+                              value: 'MWK ${listingPrice.toStringAsFixed(2)}',
+                            ),
                         ],
                       );
                     },
@@ -290,6 +481,38 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _KV extends StatelessWidget {
+  final String label;
+  final String value;
+  const _KV({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    if (value.trim().isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: Colors.grey),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ],
       ),
     );
   }
@@ -402,8 +625,7 @@ class _SparklinePainter extends CustomPainter {
     final dx = size.width / (values.length - 1);
 
     double yFor(double v) {
-      final t = (v - minV) / range; // 0..1
-      // invert: higher value is higher on chart
+      final t = (v - minV) / range;
       return size.height - (t * size.height);
     }
 
@@ -437,7 +659,6 @@ class _SparklinePainter extends CustomPainter {
     fillPath.lineTo(size.width, size.height);
     fillPath.close();
 
-    // draw light fill then line
     canvas.drawPath(fillPath, fill);
     canvas.drawPath(path, line);
   }
