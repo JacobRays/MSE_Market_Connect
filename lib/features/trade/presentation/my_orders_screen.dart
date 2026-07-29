@@ -57,7 +57,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
   }
 
   Future<void> _deleteOrder(TradeOrderModel o) async {
-    await _service.deleteMyOrder(o.id);
+    await _service.softDeleteMyOrder(o.id);
     await _refresh();
     if (!mounted) return;
     ScaffoldMessenger.of(

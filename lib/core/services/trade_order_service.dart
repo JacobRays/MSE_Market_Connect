@@ -37,6 +37,7 @@ class TradeOrderService {
           'total_estimate': totalEstimate,
           'status': 'submitted',
           'investor_note': investorNote,
+          'deleted_at': null,
         })
         .select('id')
         .single();
@@ -54,6 +55,7 @@ class TradeOrderService {
           'id, stock_symbol, side, quantity, status, broker_id, total_estimate, created_at, updated_at',
         )
         .eq('user_id', user.id)
+        .isFilter('deleted_at', null)
         .order('created_at', ascending: false)
         .limit(limit);
 
@@ -90,6 +92,7 @@ class TradeOrderService {
         )
         .eq('id', orderId)
         .eq('user_id', user.id)
+        .isFilter('deleted_at', null)
         .maybeSingle();
 
     if (row == null) return null;
@@ -108,11 +111,11 @@ class TradeOrderService {
     return order;
   }
 
-  Future<void> deleteMyOrder(String orderId) async {
+  Future<void> softDeleteMyOrder(String orderId) async {
     final user = _client.auth.currentUser;
     if (user == null) throw StateError('User not logged in');
 
-    // Client-side safety (RLS also protects)
+    // Safety: prevent removing executed/settled
     final row = await _client
         .from('trade_orders')
         .select('status')
@@ -127,7 +130,7 @@ class TradeOrderService {
 
     await _client
         .from('trade_orders')
-        .delete()
+        .update({'deleted_at': DateTime.now().toUtc().toIso8601String()})
         .eq('id', orderId)
         .eq('user_id', user.id);
   }
