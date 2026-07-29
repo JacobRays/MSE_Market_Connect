@@ -17,14 +17,9 @@ class MainNavShell extends StatefulWidget {
 class _MainNavShellState extends State<MainNavShell> {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = const [
-    HomeScreen(),
-    MarketScreen(),
-    MyAlertsScreen(), // Watchlist
-    ProfileScreen(),
-  ];
+  final _navKeys = List.generate(4, (_) => GlobalKey<NavigatorState>());
 
-  // Draggable pill position (initialized after first layout)
+  // Draggable pill position (in screen coordinates)
   Offset? _pillOffset;
 
   @override
@@ -36,15 +31,14 @@ class _MainNavShellState extends State<MainNavShell> {
   }
 
   void _openUpgrade() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const UpgradeScreen()));
+    // Push inside the current tab navigator (keeps bottom nav visible)
+    final nav = _navKeys[_currentIndex].currentState;
+    nav?.push(MaterialPageRoute(builder: (_) => const UpgradeScreen()));
   }
 
   void _initPillOffsetIfNeeded(Size size, EdgeInsets padding) {
     if (_pillOffset != null) return;
 
-    // Default: bottom-right above bottom nav
     final defaultX = size.width - 16 - _UpgradePill.width;
     final defaultY =
         size.height -
@@ -56,7 +50,7 @@ class _MainNavShellState extends State<MainNavShell> {
     _pillOffset = Offset(defaultX, defaultY);
   }
 
-  Offset _clampToSafeArea(Offset raw, Size size, EdgeInsets padding) {
+  Offset _clampPill(Offset raw, Size size, EdgeInsets padding) {
     final minX = 8.0;
     final maxX = size.width - 8 - _UpgradePill.width;
 
@@ -71,70 +65,111 @@ class _MainNavShellState extends State<MainNavShell> {
     return Offset(raw.dx.clamp(minX, maxX), raw.dy.clamp(minY, maxY));
   }
 
+  Future<bool> _onWillPop() async {
+    final nav = _navKeys[_currentIndex].currentState;
+    if (nav != null && nav.canPop()) {
+      nav.pop();
+      return false;
+    }
+
+    // If not on Home tab, go to Home first
+    if (_currentIndex != 0) {
+      setState(() => _currentIndex = 0);
+      return false;
+    }
+
+    return true; // allow app to close
+  }
+
+  Widget _tabNavigator({
+    required GlobalKey<NavigatorState> key,
+    required Widget root,
+  }) {
+    return Navigator(
+      key: key,
+      onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => root),
+    );
+    // Any pushes from within these screens will stay in this navigator,
+    // keeping the bottom nav visible.
+  }
+
   @override
   Widget build(BuildContext context) {
     final padding = MediaQuery.of(context).padding;
     final size = MediaQuery.sizeOf(context);
-
     _initPillOffsetIfNeeded(size, padding);
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          _screens[_currentIndex],
-
-          // Draggable floating "Upgrade" pill across the entire app
-          Positioned(
-            left: _pillOffset!.dx,
-            top: _pillOffset!.dy,
-            child: Draggable(
-              feedback: Material(
-                color: Colors.transparent,
-                child: _UpgradePill(onTap: _openUpgrade),
-              ),
-              childWhenDragging: Opacity(
-                opacity: 0.35,
-                child: _UpgradePill(onTap: _openUpgrade),
-              ),
-              onDragEnd: (details) {
-                final newOffset = _clampToSafeArea(
-                  details.offset,
-                  size,
-                  padding,
-                );
-                setState(() => _pillOffset = newOffset);
-              },
-              child: _UpgradePill(onTap: _openUpgrade),
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        body: Stack(
+          children: [
+            IndexedStack(
+              index: _currentIndex,
+              children: [
+                _tabNavigator(key: _navKeys[0], root: const HomeScreen()),
+                _tabNavigator(key: _navKeys[1], root: const MarketScreen()),
+                _tabNavigator(key: _navKeys[2], root: const MyAlertsScreen()),
+                _tabNavigator(key: _navKeys[3], root: const ProfileScreen()),
+              ],
             ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.show_chart_outlined),
-            activeIcon: Icon(Icons.show_chart),
-            label: 'Market',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.star_border_rounded),
-            activeIcon: Icon(Icons.star_rounded),
-            label: 'Watchlist',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            activeIcon: Icon(Icons.person),
-            label: 'Profile',
-          ),
-        ],
+
+            // Draggable upgrade pill (visible on every tab/screen)
+            Positioned(
+              left: _pillOffset!.dx,
+              top: _pillOffset!.dy,
+              child: Draggable(
+                feedback: Material(
+                  color: Colors.transparent,
+                  child: _UpgradePill(onTap: _openUpgrade),
+                ),
+                childWhenDragging: Opacity(
+                  opacity: 0.35,
+                  child: _UpgradePill(onTap: _openUpgrade),
+                ),
+                onDragEnd: (details) {
+                  final newOffset = _clampPill(details.offset, size, padding);
+                  setState(() => _pillOffset = newOffset);
+                },
+                child: _UpgradePill(onTap: _openUpgrade),
+              ),
+            ),
+          ],
+        ),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) {
+            if (index == _currentIndex) {
+              // Tap current tab again => pop to root of that tab
+              _navKeys[index].currentState?.popUntil((r) => r.isFirst);
+            } else {
+              setState(() => _currentIndex = index);
+            }
+          },
+          type: BottomNavigationBarType.fixed,
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home_outlined),
+              activeIcon: Icon(Icons.home),
+              label: 'Home',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.show_chart_outlined),
+              activeIcon: Icon(Icons.show_chart),
+              label: 'Market',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.star_border_rounded),
+              activeIcon: Icon(Icons.star_rounded),
+              label: 'Watchlist',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person_outline),
+              activeIcon: Icon(Icons.person),
+              label: 'Profile',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -167,7 +202,6 @@ class _UpgradePill extends StatelessWidget {
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
             children: const [
               Icon(Icons.workspace_premium, size: 18, color: Colors.black),
               SizedBox(width: 8),
