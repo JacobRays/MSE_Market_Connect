@@ -18,9 +18,20 @@ class BrokerDetailScreen extends StatelessWidget {
   Uri? _safeUri(String? url) {
     final u = (url ?? '').trim();
     if (u.isEmpty) return null;
-    if (u.startsWith('http://') || u.startsWith('https://'))
+    if (u.startsWith('http://') || u.startsWith('https://')) {
       return Uri.parse(u);
+    }
     return Uri.parse('https://$u');
+  }
+
+  List<String> _splitList(String? raw) {
+    final s = (raw ?? '').trim();
+    if (s.isEmpty) return const [];
+    return s
+        .split(RegExp(r'[,/]|(\s{2,})'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
   }
 
   Future<void> _open(
@@ -43,10 +54,35 @@ class BrokerDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final phone = (broker.phone ?? '').trim();
-    final altPhone = (broker.altPhone ?? '').trim();
-    final email = (broker.email ?? '').trim();
-    final altEmail = (broker.altEmail ?? '').trim();
+    final phones = <String>[
+      ..._splitList(broker.phone),
+      ..._splitList(broker.altPhone),
+    ];
+
+    // de-dupe phones
+    final phoneSet = <String>{};
+    final uniquePhones = <String>[];
+    for (final p in phones) {
+      final key = p.replaceAll(RegExp(r'\s+'), '');
+      if (key.isEmpty || phoneSet.contains(key)) continue;
+      phoneSet.add(key);
+      uniquePhones.add(p);
+    }
+
+    final emails = <String>[
+      ..._splitList(broker.email),
+      ..._splitList(broker.altEmail),
+    ];
+
+    final emailSet = <String>{};
+    final uniqueEmails = <String>[];
+    for (final e in emails) {
+      final key = e.toLowerCase();
+      if (key.isEmpty || emailSet.contains(key)) continue;
+      emailSet.add(key);
+      uniqueEmails.add(e);
+    }
+
     final websiteUri = _safeUri(broker.website);
     final address = (broker.address ?? '').trim();
     final whatsappDigits = (broker.whatsapp ?? '')
@@ -107,43 +143,43 @@ class BrokerDetailScreen extends StatelessWidget {
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 8),
+
           Card(
             child: Column(
               children: [
-                ListTile(
-                  leading: const Icon(Icons.call_outlined),
-                  title: const Text('Call'),
-                  subtitle: Text(phone.isEmpty ? 'Not provided' : phone),
-                  trailing: const Icon(Icons.open_in_new),
-                  onTap: phone.isEmpty
-                      ? null
-                      : () => _open(
-                          context,
-                          Uri.parse('tel:$phone'),
-                          fallbackCopy: phone,
-                          label: 'Phone',
-                        ),
-                  onLongPress: phone.isEmpty
-                      ? null
-                      : () => _copy(context, phone, 'Phone'),
-                ),
-                if (altPhone.isNotEmpty) ...[
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.call_outlined),
-                    title: const Text('Alt phone'),
-                    subtitle: Text(altPhone),
-                    trailing: const Icon(Icons.open_in_new),
-                    onTap: () => _open(
-                      context,
-                      Uri.parse('tel:$altPhone'),
-                      fallbackCopy: altPhone,
-                      label: 'Alt phone',
-                    ),
-                    onLongPress: () => _copy(context, altPhone, 'Alt phone'),
-                  ),
-                ],
+                // Phones (primary + alts)
+                if (uniquePhones.isEmpty)
+                  const ListTile(
+                    leading: Icon(Icons.call_outlined),
+                    title: Text('Call'),
+                    subtitle: Text('Not provided'),
+                  )
+                else
+                  ...uniquePhones
+                      .expand(
+                        (p) => [
+                          ListTile(
+                            leading: const Icon(Icons.call_outlined),
+                            title: const Text('Call'),
+                            subtitle: Text(p),
+                            trailing: const Icon(Icons.open_in_new),
+                            onTap: () => _open(
+                              context,
+                              Uri.parse('tel:$p'),
+                              fallbackCopy: p,
+                              label: 'Phone',
+                            ),
+                            onLongPress: () => _copy(context, p, 'Phone'),
+                          ),
+                          const Divider(height: 1),
+                        ],
+                      )
+                      .toList()
+                    ..removeLast(), // remove last divider
+
                 const Divider(height: 1),
+
+                // WhatsApp
                 ListTile(
                   leading: const Icon(Icons.chat_outlined),
                   title: const Text('WhatsApp'),
@@ -155,7 +191,7 @@ class BrokerDetailScreen extends StatelessWidget {
                       ? null
                       : () => _open(
                           context,
-                          waUri!,
+                          waUri,
                           fallbackCopy: whatsappDigits,
                           label: 'WhatsApp',
                         ),
@@ -163,41 +199,42 @@ class BrokerDetailScreen extends StatelessWidget {
                       ? null
                       : () => _copy(context, whatsappDigits, 'WhatsApp'),
                 ),
+
                 const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.email_outlined),
-                  title: const Text('Email'),
-                  subtitle: Text(email.isEmpty ? 'Not provided' : email),
-                  trailing: const Icon(Icons.open_in_new),
-                  onTap: email.isEmpty
-                      ? null
-                      : () => _open(
-                          context,
-                          Uri.parse('mailto:$email'),
-                          fallbackCopy: email,
-                          label: 'Email',
-                        ),
-                  onLongPress: email.isEmpty
-                      ? null
-                      : () => _copy(context, email, 'Email'),
-                ),
-                if (altEmail.isNotEmpty) ...[
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.email_outlined),
-                    title: const Text('Alt email'),
-                    subtitle: Text(altEmail),
-                    trailing: const Icon(Icons.open_in_new),
-                    onTap: () => _open(
-                      context,
-                      Uri.parse('mailto:$altEmail'),
-                      fallbackCopy: altEmail,
-                      label: 'Alt email',
-                    ),
-                    onLongPress: () => _copy(context, altEmail, 'Alt email'),
-                  ),
-                ],
+
+                // Emails (primary + alts)
+                if (uniqueEmails.isEmpty)
+                  const ListTile(
+                    leading: Icon(Icons.email_outlined),
+                    title: Text('Email'),
+                    subtitle: Text('Not provided'),
+                  )
+                else
+                  ...uniqueEmails
+                      .expand(
+                        (e) => [
+                          ListTile(
+                            leading: const Icon(Icons.email_outlined),
+                            title: const Text('Email'),
+                            subtitle: Text(e),
+                            trailing: const Icon(Icons.open_in_new),
+                            onTap: () => _open(
+                              context,
+                              Uri.parse('mailto:$e'),
+                              fallbackCopy: e,
+                              label: 'Email',
+                            ),
+                            onLongPress: () => _copy(context, e, 'Email'),
+                          ),
+                          const Divider(height: 1),
+                        ],
+                      )
+                      .toList()
+                    ..removeLast(),
+
                 const Divider(height: 1),
+
+                // Website
                 ListTile(
                   leading: const Icon(Icons.language_outlined),
                   title: const Text('Website'),
@@ -209,7 +246,7 @@ class BrokerDetailScreen extends StatelessWidget {
                       ? null
                       : () => _open(
                           context,
-                          websiteUri!,
+                          websiteUri,
                           fallbackCopy: websiteUri.toString(),
                           label: 'Website',
                         ),
@@ -238,7 +275,7 @@ class BrokerDetailScreen extends StatelessWidget {
                     ? null
                     : () => _open(
                         context,
-                        mapsUri!,
+                        mapsUri,
                         fallbackCopy: address,
                         label: 'Address',
                       ),
@@ -278,7 +315,7 @@ class _Chip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.05),
+        color: Colors.black.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(

@@ -23,19 +23,23 @@ class TradeOrderService {
     final feeAmount = subtotal * feeRate;
     final totalEstimate = subtotal + feeAmount;
 
-    final inserted = await _client.from('trade_orders').insert({
-      'user_id': user.id,
-      'broker_id': broker.id,
-      'stock_symbol': stock.symbol,
-      'side': side,
-      'quantity': quantity,
-      'price_at_submission': priceAtSubmission,
-      'fee_rate': feeRate,
-      'fee_amount': feeAmount,
-      'total_estimate': totalEstimate,
-      'status': 'submitted',
-      'investor_note': investorNote,
-    }).select('id').single();
+    final inserted = await _client
+        .from('trade_orders')
+        .insert({
+          'user_id': user.id,
+          'broker_id': broker.id,
+          'stock_symbol': stock.symbol,
+          'side': side,
+          'quantity': quantity,
+          'price_at_submission': priceAtSubmission,
+          'fee_rate': feeRate,
+          'fee_amount': feeAmount,
+          'total_estimate': totalEstimate,
+          'status': 'submitted',
+          'investor_note': investorNote,
+        })
+        .select('id')
+        .single();
 
     return inserted['id'] as String;
   }
@@ -46,7 +50,9 @@ class TradeOrderService {
 
     final resp = await _client
         .from('trade_orders')
-        .select('id, stock_symbol, side, quantity, status, broker_id, total_estimate, created_at, updated_at')
+        .select(
+          'id, stock_symbol, side, quantity, status, broker_id, total_estimate, created_at, updated_at',
+        )
         .eq('user_id', user.id)
         .order('created_at', ascending: false)
         .limit(limit);
@@ -64,9 +70,13 @@ class TradeOrderService {
         .inFilter('id', brokerIds);
 
     final brokers = (brokersResp as List).cast<Map<String, dynamic>>();
-    final nameById = {for (final b in brokers) b['id'] as String: b['name'] as String};
+    final nameById = {
+      for (final b in brokers) b['id'] as String: b['name'] as String,
+    };
 
-    return orders.map((o) => o.copyWith(brokerName: nameById[o.brokerId])).toList();
+    return orders
+        .map((o) => o.copyWith(brokerName: nameById[o.brokerId]))
+        .toList();
   }
 
   Future<TradeOrderModel?> getMyOrderById(String orderId) async {
@@ -75,7 +85,9 @@ class TradeOrderService {
 
     final Map<String, dynamic>? row = await _client
         .from('trade_orders')
-        .select('id, stock_symbol, side, quantity, status, broker_id, total_estimate, created_at, updated_at')
+        .select(
+          'id, stock_symbol, side, quantity, status, broker_id, total_estimate, created_at, updated_at',
+        )
         .eq('id', orderId)
         .eq('user_id', user.id)
         .maybeSingle();
@@ -89,11 +101,34 @@ class TradeOrderService {
         .select('name')
         .eq('id', order.brokerId)
         .maybeSingle();
-
     if (broker != null) {
       order = order.copyWith(brokerName: broker['name'] as String?);
     }
 
     return order;
+  }
+
+  Future<void> deleteMyOrder(String orderId) async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw StateError('User not logged in');
+
+    // Client-side safety (RLS also protects)
+    final row = await _client
+        .from('trade_orders')
+        .select('status')
+        .eq('id', orderId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+    final status = (row?['status'] ?? 'submitted').toString().toLowerCase();
+    if (status == 'executed' || status == 'settled') {
+      throw StateError('Cannot delete an $status order');
+    }
+
+    await _client
+        .from('trade_orders')
+        .delete()
+        .eq('id', orderId)
+        .eq('user_id', user.id);
   }
 }

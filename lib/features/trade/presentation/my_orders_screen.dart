@@ -28,6 +28,43 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
   String _fmt(DateTime dt) =>
       '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
 
+  bool _canDelete(TradeOrderModel o) {
+    final s = o.status.toLowerCase();
+    return s != 'executed' && s != 'settled';
+  }
+
+  Future<bool> _confirmDelete() async {
+    final ok =
+        await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Delete order?'),
+            content: const Text('This will remove the order from your list.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    return ok;
+  }
+
+  Future<void> _deleteOrder(TradeOrderModel o) async {
+    await _service.deleteMyOrder(o.id);
+    await _refresh();
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Order deleted')));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -45,9 +82,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
               return ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
-                children: [
-                  Text('Failed to load orders.\n${snapshot.error}'),
-                ],
+                children: [Text('Failed to load orders.\n${snapshot.error}')],
               );
             }
 
@@ -73,8 +108,9 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                 final total = o.totalEstimate == null
                     ? '—'
                     : 'MWK ${o.totalEstimate!.toStringAsFixed(2)}';
+                final deletable = _canDelete(o);
 
-                return Card(
+                final card = Card(
                   child: ListTile(
                     isThreeLine: true,
                     title: Text('${o.stockSymbol} • ${o.side.toUpperCase()}'),
@@ -90,7 +126,32 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                         ],
                       ),
                     ),
-                    trailing: const Icon(Icons.chevron_right),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: 'Delete',
+                          onPressed: !deletable
+                              ? null
+                              : () async {
+                                  final ok = await _confirmDelete();
+                                  if (!ok) return;
+                                  try {
+                                    await _deleteOrder(o);
+                                  } catch (e) {
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Delete failed: $e'),
+                                      ),
+                                    );
+                                  }
+                                },
+                          icon: const Icon(Icons.delete_outline),
+                        ),
+                        const Icon(Icons.chevron_right),
+                      ],
+                    ),
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
@@ -99,6 +160,38 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                       );
                     },
                   ),
+                );
+
+                if (!deletable) return card;
+
+                return Dismissible(
+                  key: ValueKey(o.id),
+                  direction: DismissDirection.endToStart,
+                  confirmDismiss: (_) => _confirmDelete(),
+                  onDismissed: (_) async {
+                    try {
+                      await _deleteOrder(o);
+                    } catch (e) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Delete failed: $e')),
+                      );
+                      await _refresh();
+                    }
+                  },
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade600,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.white,
+                    ),
+                  ),
+                  child: card,
                 );
               },
             );
