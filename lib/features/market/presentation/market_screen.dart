@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:mse_market_connect/core/services/market_service.dart';
 import 'package:mse_market_connect/core/services/price_alert_service.dart';
-import 'package:mse_market_connect/core/theme/app_theme.dart';
+
+import 'package:mse_market_connect/shared/widgets/company_logo.dart';
 import 'package:mse_market_connect/features/market/presentation/market_action_sheet.dart';
 import 'package:mse_market_connect/features/market/presentation/my_alerts_screen.dart';
 import 'package:mse_market_connect/features/market/presentation/stock_detail_screen.dart';
@@ -374,9 +375,9 @@ class _StockCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isPositive = stock.changePercent >= 0;
     final flashColor = flashDir == 1
-        ? AppTheme.gainColor.withValues(alpha: 0.10)
+        ? AppTheme.gainColor.withOpacity(0.10)
         : flashDir == -1
-        ? AppTheme.lossColor.withValues(alpha: 0.10)
+        ? AppTheme.lossColor.withOpacity(0.10)
         : Colors.transparent;
 
     return Padding(
@@ -389,6 +390,12 @@ class _StockCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
             child: Row(
               children: [
+                CompanyLogo(
+                  symbol: stock.symbol,
+                  logoUrl: stock.logoUrl,
+                  size: 44,
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
