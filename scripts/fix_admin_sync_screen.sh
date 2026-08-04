@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:mse_market_connect/core/services/mse_price_sync_service.dart';
 import 'package:mse_market_connect/core/services/price_sync_edge_service.dart';
 import 'package:mse_market_connect/core/services/news_sync_service.dart';
+import 'package:mse_market_connect/core/services/mse_sync_service.dart'; // web fallback (CORS-proxy)
 
 class AdminSyncPricesScreen extends StatefulWidget {
   const AdminSyncPricesScreen({super.key});
@@ -23,8 +24,8 @@ class AdminSyncPricesScreen extends StatefulWidget {
 }
 
 class _AdminSyncPricesScreenState extends State<AdminSyncPricesScreen> {
-  final _prices = MsePriceSyncService();
-  final _edge = PriceSyncEdgeService();
+  final _prices = MsePriceSyncService();      // mobile native scraper
+  final _edge = PriceSyncEdgeService();       // web: edge function
   final _news = NewsSyncService();
 
   bool _syncingPrices = false;
@@ -35,10 +36,22 @@ class _AdminSyncPricesScreenState extends State<AdminSyncPricesScreen> {
     try {
       final int count;
       if (kIsWeb) {
-        // Web: call Edge Function (server-side scrape)
-        count = await _edge.syncNow();
+        // Preferred: Edge Function (server-side scrape)
+        try {
+          count = await _edge.syncNow();
+        } catch (e) {
+          // Fallback: client-side CORS-proxy scraper (may be blocked, but we try once)
+          final alt = MseSyncService();
+          final altCount = await alt.syncPrices();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Edge failed; fallback used. Updated $altCount. Err: $e')),
+          );
+          setState(() => _syncingPrices = false);
+          return;
+        }
       } else {
-        // Android/iOS: use native scraper service
+        // Android/iOS
         count = await _prices.syncMainboardPrices();
       }
       if (!mounted) return;

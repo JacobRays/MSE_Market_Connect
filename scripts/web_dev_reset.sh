@@ -1,3 +1,8 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+DST="web/index.html"
+[[ -f "$DST" ]] && cp -a "$DST" "${DST}.bak.$(date +%Y%m%d_%H%M%S)"
+cat > "$DST" << 'HTML'
 <!DOCTYPE html>
 <html>
   <head>
@@ -32,3 +37,8 @@
     </script>
   </body>
 </html>
+HTML
+echo "Reset web/index.html. Now do this once in your browser:
+- DevTools > Application > Service Workers: Unregister
+- Application > Storage: Clear site data (all)
+- Hard refresh (Ctrl+Shift+R) or open in a private window."
