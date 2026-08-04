@@ -165,7 +165,7 @@ class TradeOrderService {
         .eq('user_id', user.id);
   }
 
-  // Cancel order (only submitted/approved). Change 'cancelled' -> 'cancelled' if your DB uses British spelling.
+  // Cancel order (only submitted/approved). Change 'canceled' -> 'cancelled' if your DB uses British spelling.
   Future<void> cancelMyOrder(String orderId) async {
     final user = _client.auth.currentUser;
     if (user == null) throw StateError('User not logged in');
@@ -189,7 +189,7 @@ class TradeOrderService {
     await _client
         .from('trade_orders')
         .update({
-          'status': 'cancelled',
+          'status': 'canceled',
           'updated_at': DateTime.now().toUtc().toIso8601String(),
         })
         .eq('id', orderId)

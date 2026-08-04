@@ -48,7 +48,6 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
     'rejected',
     'executed',
     'settled',
-    'cancelled',
   ];
 
   @override
