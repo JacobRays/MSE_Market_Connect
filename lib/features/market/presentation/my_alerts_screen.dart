@@ -93,9 +93,7 @@ class _MyAlertsScreenState extends State<MyAlertsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Watch'),
-      ),
+      appBar: AppBar(title: const Text('Watch')),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: FutureBuilder<List<PriceAlertModel>>(
@@ -108,7 +106,9 @@ class _MyAlertsScreenState extends State<MyAlertsScreen> {
               return ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
-                children: [Text('Failed to load watch list.\n${snapshot.error}')],
+                children: [
+                  Text('Failed to load watch list.\n${snapshot.error}'),
+                ],
               );
             }
 
@@ -123,7 +123,9 @@ class _MyAlertsScreenState extends State<MyAlertsScreen> {
                   const SizedBox(height: 50),
                   const Icon(Icons.track_changes_outlined, size: 64),
                   const SizedBox(height: 12),
-                  const Center(child: Text('You are not watching any companies yet.')),
+                  const Center(
+                    child: Text('You are not watching any companies yet.'),
+                  ),
                   const SizedBox(height: 14),
                   SizedBox(
                     height: 52,
@@ -164,7 +166,9 @@ class _MyAlertsScreenState extends State<MyAlertsScreen> {
 
                 final a = alerts[index];
                 final isBuy = a.alertType == 'buy';
-                final typeColor = isBuy ? AppTheme.primaryColor : AppTheme.secondaryColor;
+                final typeColor = isBuy
+                    ? AppTheme.primaryColor
+                    : AppTheme.secondaryColor;
 
                 final currentPrice = a.currentPrice;
                 final change = a.changePercent;
@@ -174,11 +178,16 @@ class _MyAlertsScreenState extends State<MyAlertsScreen> {
                     contentPadding: const EdgeInsets.all(16),
                     title: Row(
                       children: [
-                        Text(a.stockSymbol,
-                            style: Theme.of(context).textTheme.titleMedium),
+                        Text(
+                          a.stockSymbol,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
                         const SizedBox(width: 10),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: typeColor.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(999),
@@ -196,7 +205,9 @@ class _MyAlertsScreenState extends State<MyAlertsScreen> {
                         Icon(
                           a.isActive ? Icons.circle : Icons.check_circle,
                           size: 14,
-                          color: a.isActive ? Colors.orange : AppTheme.gainColor,
+                          color: a.isActive
+                              ? Colors.orange
+                              : AppTheme.gainColor,
                         ),
                       ],
                     ),

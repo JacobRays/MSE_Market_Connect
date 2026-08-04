@@ -1,7 +1,7 @@
 class TradeOrderModel {
   final String id;
-  final String stockSymbol;
-  final String side; // buy|sell
+  final String stockSymbol; // e.g. 'AHL'
+  final String side; // 'buy' | 'sell'
   final int quantity;
   final String status;
 
@@ -9,6 +9,9 @@ class TradeOrderModel {
   final String? brokerName;
 
   final double? totalEstimate;
+
+  final String?
+  rejectReason; // optional: reason from broker when status == 'rejected'
 
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -24,9 +27,15 @@ class TradeOrderModel {
     required this.updatedAt,
     this.brokerName,
     this.totalEstimate,
+    this.rejectReason,
   });
 
   factory TradeOrderModel.fromMap(Map<String, dynamic> map) {
+    String? rr = map['reject_reason'] as String?;
+    rr ??= map['rejection_reason'] as String?;
+    rr ??= map['broker_reason'] as String?;
+    rr ??= map['reason'] as String?;
+
     return TradeOrderModel(
       id: map['id'] as String,
       stockSymbol: map['stock_symbol'] as String,
@@ -35,12 +44,13 @@ class TradeOrderModel {
       status: (map['status'] as String?) ?? 'submitted',
       brokerId: map['broker_id'] as String,
       totalEstimate: (map['total_estimate'] as num?)?.toDouble(),
+      rejectReason: rr,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
     );
   }
 
-  TradeOrderModel copyWith({String? brokerName}) {
+  TradeOrderModel copyWith({String? brokerName, String? rejectReason}) {
     return TradeOrderModel(
       id: id,
       stockSymbol: stockSymbol,
@@ -52,6 +62,7 @@ class TradeOrderModel {
       totalEstimate: totalEstimate,
       createdAt: createdAt,
       updatedAt: updatedAt,
+      rejectReason: rejectReason ?? this.rejectReason,
     );
   }
 }

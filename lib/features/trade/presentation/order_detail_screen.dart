@@ -50,7 +50,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               return ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
-                children: const [SizedBox(height: 40), Center(child: Text('Order not found.'))],
+                children: const [
+                  SizedBox(height: 40),
+                  Center(child: Text('Order not found.')),
+                ],
               );
             }
 
@@ -64,8 +67,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('${o.stockSymbol} • ${o.side.toUpperCase()}',
-                            style: Theme.of(context).textTheme.titleLarge),
+                        Text(
+                          '${o.stockSymbol} • ${o.side.toUpperCase()}',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
                         const SizedBox(height: 8),
                         Text('Quantity: ${o.quantity}'),
                         Text('Broker: ${o.brokerName ?? o.brokerId}'),
@@ -75,7 +80,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         Text('Created: ${o.createdAt}'),
                         Text('Updated: ${o.updatedAt}'),
                         if (o.totalEstimate != null)
-                          Text('Total estimate: MWK ${o.totalEstimate!.toStringAsFixed(2)}'),
+                          Text(
+                            'Total estimate: MWK ${o.totalEstimate!.toStringAsFixed(2)}',
+                          ),
                       ],
                     ),
                   ),

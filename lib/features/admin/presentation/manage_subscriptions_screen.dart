@@ -6,7 +6,8 @@ class ManageSubscriptionsScreen extends StatefulWidget {
   const ManageSubscriptionsScreen({super.key});
 
   @override
-  State<ManageSubscriptionsScreen> createState() => _ManageSubscriptionsScreenState();
+  State<ManageSubscriptionsScreen> createState() =>
+      _ManageSubscriptionsScreenState();
 }
 
 class _ManageSubscriptionsScreenState extends State<ManageSubscriptionsScreen> {
@@ -25,10 +26,7 @@ class _ManageSubscriptionsScreenState extends State<ManageSubscriptionsScreen> {
     final subsMap = await _service.getSubscriptionsByUserIds(userIds);
 
     return profiles.map((p) {
-      return AdminUserSubscription(
-        profile: p,
-        subscription: subsMap[p.id],
-      );
+      return AdminUserSubscription(profile: p, subscription: subsMap[p.id]);
     }).toList();
   }
 
@@ -95,7 +93,10 @@ class _ManageSubscriptionsScreenState extends State<ManageSubscriptionsScreen> {
                     title: Text(x.profile.email),
                     subtitle: Text('Plan: ${x.plan}'),
                     trailing: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: chipColor.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(999),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mse_market_connect/core/services/broker_service.dart';
 import 'package:mse_market_connect/features/brokers/presentation/broker_detail_screen.dart';
 import 'package:mse_market_connect/shared/models/broker_model.dart';
+import 'package:mse_market_connect/core/services/broker_service_x.dart';
 
 class BrokerListScreen extends StatelessWidget {
   const BrokerListScreen({super.key});
@@ -13,7 +14,7 @@ class BrokerListScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Licensed Brokers')),
       body: FutureBuilder<List<BrokerModel>>(
-        future: service.getActiveBrokers(),
+        future: service.getActiveBrokersUnique(),
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
@@ -24,7 +25,15 @@ class BrokerListScreen extends StatelessWidget {
             );
           }
 
-          final brokers = snapshot.data ?? [];
+          final raw = snapshot.data ?? [];
+          final brokers = _dedupeBrokersByName(raw);
+          if (raw.length != brokers.length) {
+            // ignore: avoid_print
+            print(
+              'BrokerListScreen: removed ${raw.length - brokers.length} duplicate broker(s) by name',
+            );
+          }
+
           if (brokers.isEmpty) {
             return const Center(
               child: Text('No licensed brokers available yet.'),
@@ -63,4 +72,15 @@ class BrokerListScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+List<BrokerModel> _dedupeBrokersByName(List<BrokerModel> list) {
+  final seen = <String>{};
+  final out = <BrokerModel>[];
+  for (final b in list) {
+    final key = b.name.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+    if (seen.add(key)) out.add(b);
+  }
+  out.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  return out;
 }

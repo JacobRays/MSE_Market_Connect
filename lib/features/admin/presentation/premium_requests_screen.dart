@@ -63,9 +63,18 @@ class _PremiumRequestsScreenState extends State<PremiumRequestsScreen> {
             padding: const EdgeInsets.all(12),
             child: SegmentedButton<RequestFilter>(
               segments: const [
-                ButtonSegment(value: RequestFilter.pending, label: Text('Pending')),
-                ButtonSegment(value: RequestFilter.approved, label: Text('Approved')),
-                ButtonSegment(value: RequestFilter.rejected, label: Text('Rejected')),
+                ButtonSegment(
+                  value: RequestFilter.pending,
+                  label: Text('Pending'),
+                ),
+                ButtonSegment(
+                  value: RequestFilter.approved,
+                  label: Text('Approved'),
+                ),
+                ButtonSegment(
+                  value: RequestFilter.rejected,
+                  label: Text('Rejected'),
+                ),
               ],
               selected: {_filter},
               onSelectionChanged: (set) {
@@ -89,7 +98,9 @@ class _PremiumRequestsScreenState extends State<PremiumRequestsScreen> {
                     return ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.all(16),
-                      children: [Text('Failed to load requests.\n${snapshot.error}')],
+                      children: [
+                        Text('Failed to load requests.\n${snapshot.error}'),
+                      ],
                     );
                   }
 
@@ -109,14 +120,19 @@ class _PremiumRequestsScreenState extends State<PremiumRequestsScreen> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(16),
                     itemCount: items.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 12),
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final x = items[index];
                       final p = x.profile;
 
                       final email = p?.email ?? x.request.userId;
-                      final name = (p?.fullName?.trim().isNotEmpty ?? false) ? p!.fullName! : null;
-                      final phone = (p?.phone?.trim().isNotEmpty ?? false) ? p!.phone! : null;
+                      final name = (p?.fullName?.trim().isNotEmpty ?? false)
+                          ? p!.fullName!
+                          : null;
+                      final phone = (p?.phone?.trim().isNotEmpty ?? false)
+                          ? p!.phone!
+                          : null;
 
                       return Card(
                         child: ListTile(
@@ -126,7 +142,9 @@ class _PremiumRequestsScreenState extends State<PremiumRequestsScreen> {
                           ),
                           trailing: const Icon(Icons.chevron_right),
                           onTap: () async {
-                            final note = TextEditingController(text: x.request.adminNote ?? '');
+                            final note = TextEditingController(
+                              text: x.request.adminNote ?? '',
+                            );
 
                             await showModalBottomSheet(
                               context: context,
@@ -136,13 +154,21 @@ class _PremiumRequestsScreenState extends State<PremiumRequestsScreen> {
                                   left: 16,
                                   right: 16,
                                   top: 16,
-                                  bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
+                                  bottom:
+                                      16 +
+                                      MediaQuery.of(context).viewInsets.bottom,
                                 ),
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
                                   children: [
-                                    Text(email, style: Theme.of(context).textTheme.titleLarge),
+                                    Text(
+                                      email,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.titleLarge,
+                                    ),
                                     if (name != null) ...[
                                       const SizedBox(height: 4),
                                       Text('Name: $name'),
@@ -152,12 +178,17 @@ class _PremiumRequestsScreenState extends State<PremiumRequestsScreen> {
                                       Text('Phone: $phone'),
                                     ],
                                     const SizedBox(height: 10),
-                                    Text('Status: ${x.request.status.toUpperCase()}'),
+                                    Text(
+                                      'Status: ${x.request.status.toUpperCase()}',
+                                    ),
                                     const SizedBox(height: 12),
                                     SizedBox(
                                       height: 52,
                                       child: OutlinedButton.icon(
-                                        onPressed: () => _openReceipt(x, messenger: messenger),
+                                        onPressed: () => _openReceipt(
+                                          x,
+                                          messenger: messenger,
+                                        ),
                                         icon: const Icon(Icons.receipt_long),
                                         label: const Text('View payment proof'),
                                       ),
@@ -166,7 +197,8 @@ class _PremiumRequestsScreenState extends State<PremiumRequestsScreen> {
                                     TextField(
                                       controller: note,
                                       decoration: const InputDecoration(
-                                        labelText: 'Admin note / rejection reason',
+                                        labelText:
+                                            'Admin note / rejection reason',
                                         hintText: 'Required when rejecting',
                                       ),
                                       maxLines: 2,
@@ -183,20 +215,33 @@ class _PremiumRequestsScreenState extends State<PremiumRequestsScreen> {
                                               await _service.approveRequest(
                                                 requestId: x.request.id,
                                                 userId: x.request.userId,
-                                                adminNote: note.text.trim().isEmpty ? null : note.text.trim(),
+                                                adminNote:
+                                                    note.text.trim().isEmpty
+                                                    ? null
+                                                    : note.text.trim(),
                                                 premiumDays: 30,
                                               );
                                               if (!mounted) return;
-                                              messenger.showSnackBar(const SnackBar(content: Text('Approved')));
+                                              messenger.showSnackBar(
+                                                const SnackBar(
+                                                  content: Text('Approved'),
+                                                ),
+                                              );
                                               await _refresh();
                                             } catch (e) {
                                               if (!mounted) return;
                                               messenger.showSnackBar(
-                                                SnackBar(content: Text('Approve failed: $e')),
+                                                SnackBar(
+                                                  content: Text(
+                                                    'Approve failed: $e',
+                                                  ),
+                                                ),
                                               );
                                             }
                                           },
-                                          child: const Text('Approve (Premium 30 days)'),
+                                          child: const Text(
+                                            'Approve (Premium 30 days)',
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(height: 10),
@@ -207,7 +252,11 @@ class _PremiumRequestsScreenState extends State<PremiumRequestsScreen> {
                                             final reason = note.text.trim();
                                             if (reason.isEmpty) {
                                               messenger.showSnackBar(
-                                                const SnackBar(content: Text('Rejection reason is required')),
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Rejection reason is required',
+                                                  ),
+                                                ),
                                               );
                                               return;
                                             }
@@ -218,16 +267,26 @@ class _PremiumRequestsScreenState extends State<PremiumRequestsScreen> {
                                                 adminNote: reason,
                                               );
                                               if (!mounted) return;
-                                              messenger.showSnackBar(const SnackBar(content: Text('Rejected')));
+                                              messenger.showSnackBar(
+                                                const SnackBar(
+                                                  content: Text('Rejected'),
+                                                ),
+                                              );
                                               await _refresh();
                                             } catch (e) {
                                               if (!mounted) return;
                                               messenger.showSnackBar(
-                                                SnackBar(content: Text('Reject failed: $e')),
+                                                SnackBar(
+                                                  content: Text(
+                                                    'Reject failed: $e',
+                                                  ),
+                                                ),
                                               );
                                             }
                                           },
-                                          child: const Text('Reject (with reason)'),
+                                          child: const Text(
+                                            'Reject (with reason)',
+                                          ),
                                         ),
                                       ),
                                     ],

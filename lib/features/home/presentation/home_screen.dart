@@ -408,10 +408,12 @@ class _MarqueeState extends State<_Marquee> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Text(
             text,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w800,
               fontSize: 13,
-              color: Colors.white,
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.white
+                  : AppTheme.primaryColor,
             ),
           ),
         ),

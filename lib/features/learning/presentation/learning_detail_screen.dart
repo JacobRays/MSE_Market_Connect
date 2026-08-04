@@ -17,17 +17,12 @@ class LearningArticle {
 class LearningDetailScreen extends StatelessWidget {
   final LearningArticle article;
 
-  const LearningDetailScreen({
-    super.key,
-    required this.article,
-  });
+  const LearningDetailScreen({super.key, required this.article});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Learn'),
-      ),
+      appBar: AppBar(title: const Text('Learn')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -49,10 +44,7 @@ class LearningDetailScreen extends StatelessWidget {
               ...article.paragraphs.map(
                 (p) => Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  child: Text(
-                    p,
-                    style: Theme.of(context).textTheme.bodyLarge,
-                  ),
+                  child: Text(p, style: Theme.of(context).textTheme.bodyLarge),
                 ),
               ),
               if (article.bullets.isNotEmpty) ...[

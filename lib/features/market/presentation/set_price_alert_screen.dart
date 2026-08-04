@@ -92,7 +92,9 @@ class _SetPriceAlertScreenState extends State<SetPriceAlertScreen> {
                     onPressed: () {
                       Navigator.pop(context);
                       Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const UpgradeScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const UpgradeScreen(),
+                        ),
                       );
                     },
                     child: const Text('View Premium'),
@@ -126,9 +128,9 @@ class _SetPriceAlertScreenState extends State<SetPriceAlertScreen> {
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save alert: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to save alert: $e')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -145,9 +147,9 @@ class _SetPriceAlertScreenState extends State<SetPriceAlertScreen> {
       Navigator.pop(context);
     } catch (err) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete alert: $err')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to delete alert: $err')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -158,7 +160,9 @@ class _SetPriceAlertScreenState extends State<SetPriceAlertScreen> {
     final isEdit = widget.existingAlert != null;
 
     return Scaffold(
-      appBar: AppBar(title: Text(isEdit ? 'Edit Price Alert' : 'Set Price Alert')),
+      appBar: AppBar(
+        title: Text(isEdit ? 'Edit Price Alert' : 'Set Price Alert'),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -171,12 +175,16 @@ class _SetPriceAlertScreenState extends State<SetPriceAlertScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(widget.stockSymbol,
-                          style: Theme.of(context).textTheme.titleLarge),
+                      Text(
+                        widget.stockSymbol,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
                       const SizedBox(height: 6),
                       Text(widget.companyName),
                       const SizedBox(height: 12),
-                      Text('Current: MWK ${widget.currentPrice.toStringAsFixed(2)}'),
+                      Text(
+                        'Current: MWK ${widget.currentPrice.toStringAsFixed(2)}',
+                      ),
                     ],
                   ),
                 ),
@@ -188,13 +196,22 @@ class _SetPriceAlertScreenState extends State<SetPriceAlertScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Alert type', style: Theme.of(context).textTheme.titleMedium),
+                      Text(
+                        'Alert type',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                       const SizedBox(height: 10),
                       DropdownButtonFormField<String>(
                         initialValue: _type,
                         items: const [
-                          DropdownMenuItem(value: 'buy', child: Text('Buy alert (price <= target)')),
-                          DropdownMenuItem(value: 'sell', child: Text('Sell alert (price >= target)')),
+                          DropdownMenuItem(
+                            value: 'buy',
+                            child: Text('Buy alert (price <= target)'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'sell',
+                            child: Text('Sell alert (price >= target)'),
+                          ),
                         ],
                         onChanged: (v) => setState(() => _type = v ?? 'buy'),
                       ),

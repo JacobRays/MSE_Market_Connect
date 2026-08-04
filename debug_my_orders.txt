@@ -1,0 +1,1009 @@
+==== lib/features/trade/presentation/my_orders_screen.dart ====
+-- imports --
+1:import 'dart:async';
+2:import 'package:flutter/material.dart';
+3:import 'package:intl/intl.dart';
+4:import 'package:mse_market_connect/core/services/trade_order_service.dart';
+5:import 'package:mse_market_connect/shared/models/trade_order_model.dart';
+6:import 'package:mse_market_connect/shared/utils/csv_download.dart';
+7:import 'package:shared_preferences/shared_preferences.dart';
+8:import 'package:supabase_flutter/supabase_flutter.dart';
+9:import 'order_detail_screen.dart';
+-- content (with line numbers) --
+     1    import 'dart:async';
+     2    import 'package:flutter/material.dart';
+     3    import 'package:intl/intl.dart';
+     4    import 'package:mse_market_connect/core/services/trade_order_service.dart';
+     5    import 'package:mse_market_connect/shared/models/trade_order_model.dart';
+     6    import 'package:mse_market_connect/shared/utils/csv_download.dart';
+     7    import 'package:shared_preferences/shared_preferences.dart';
+     8    import 'package:supabase_flutter/supabase_flutter.dart';
+     9    import 'order_detail_screen.dart';
+    10    
+    11    enum OrderSort { newest, oldest }
+    12    
+    13    class MyOrdersScreen extends StatefulWidget {
+    14      const MyOrdersScreen({super.key});
+    15    
+    16      @override
+    17      State<MyOrdersScreen> createState() => _MyOrdersScreenState();
+    18    }
+    19    
+    20    class _MyOrdersScreenState extends State<MyOrdersScreen> {
+    21      final _service = TradeOrderService();
+    22      final _fmt = DateFormat('yMMMd • HH:mm');
+    23    
+    24      final _scroll = ScrollController();
+    25    
+    26      List<TradeOrderModel> _orders = [];
+    27      bool _loading = true;
+    28      String? _error;
+    29    
+    30      OrderSort _sort = OrderSort.newest;
+    31      String? _statusFilter; // null = All
+    32    
+    33      // paging
+    34      static const _pageSize = 30;
+    35      int _offset = 0;
+    36      bool _hasMore = true;
+    37      bool _loadingMore = false;
+    38    
+    39      RealtimeChannel? _ordersChannel;
+    40      Timer? _debounce;
+    41    
+    42      static const _prefSort = 'orders_sort';
+    43      static const _prefFilter = 'orders_filter';
+    44    
+    45      static const List<String> _statuses = [
+    46        'submitted',
+    47        'approved',
+    48        'rejected',
+    49        'executed',
+    50        'settled',
+    51      ];
+    52    
+    53      @override
+    54      void initState() {
+    55        super.initState();
+    56        _scroll.addListener(_onScroll);
+    57        _loadPrefs().then((_) {
+    58          _load(reset: true);
+    59          _listenRealtime();
+    60        });
+    61      }
+    62    
+    63      @override
+    64      void dispose() {
+    65        _debounce?.cancel();
+    66        _scroll.removeListener(_onScroll);
+    67        _scroll.dispose();
+    68        if (_ordersChannel != null) {
+    69          Supabase.instance.client.removeChannel(_ordersChannel!);
+    70        }
+    71        super.dispose();
+    72      }
+    73    
+    74      Future<void> _loadPrefs() async {
+    75        final prefs = await SharedPreferences.getInstance();
+    76        final sortStr = prefs.getString(_prefSort);
+    77        final filt = prefs.getString(_prefFilter);
+    78        setState(() {
+    79          _sort = sortStr == 'oldest' ? OrderSort.oldest : OrderSort.newest;
+    80          _statusFilter = (filt == null || filt.isEmpty) ? null : filt;
+    81        });
+    82      }
+    83    
+    84      Future<void> _savePrefs() async {
+    85        final prefs = await SharedPreferences.getInstance();
+    86        await prefs.setString(_prefSort, _sort == OrderSort.oldest ? 'oldest' : 'newest');
+    87        await prefs.setString(_prefFilter, _statusFilter ?? '');
+    88      }
+    89    
+    90      Future<void> _load({required bool reset}) async {
+    91        if (reset) {
+    92          setState(() {
+    93            _loading = true;
+    94            _error = null;
+    95            _orders = [];
+    96            _offset = 0;
+    97            _hasMore = true;
+    98          });
+    99        }
+   100        try {
+   101          final page = await _service.getMyOrdersPage(
+   102            status: _statusFilter,
+   103            ascending: _sort == OrderSort.oldest,
+   104            limit: _pageSize,
+   105            offset: _offset,
+   106          );
+   107          setState(() {
+   108            _orders = reset ? page.items : [..._orders, ...page.items];
+   109            _offset = page.nextOffset;
+   110            _hasMore = page.hasMore;
+   111          });
+   112        } catch (e) {
+   113          setState(() => _error = e.toString());
+   114        } finally {
+   115          if (mounted) setState(() => _loading = false);
+   116        }
+   117      }
+   118    
+   119      void _onScroll() {
+   120        if (!_hasMore || _loadingMore || _loading) return;
+   121        if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 240) {
+   122          _loadingMore = true;
+   123          _load(reset: false).whenComplete(() {
+   124            _loadingMore = false;
+   125          });
+   126        }
+   127      }
+   128    
+   129      void _scheduleReload() {
+   130        _debounce?.cancel();
+   131        _debounce = Timer(const Duration(milliseconds: 400), () {
+   132          if (mounted) _load(reset: true);
+   133        });
+   134      }
+   135    
+   136      void _listenRealtime() {
+   137        final user = Supabase.instance.client.auth.currentUser;
+   138        if (user == null) return;
+   139    
+   140        _ordersChannel = Supabase.instance.client
+   141            .channel('orders-live-${user.id}')
+   142            .onPostgresChanges(
+   143              event: PostgresChangeEvent.all,
+   144              schema: 'public',
+   145              table: 'trade_orders',
+   146              callback: (payload) {
+   147                final rec = payload.newRecord.isNotEmpty ? payload.newRecord : payload.oldRecord;
+   148                if (rec.isEmpty) return;
+   149                if ((rec['user_id'] ?? '') != user.id) return;
+   150                _scheduleReload();
+   151              },
+   152            )
+   153            .subscribe();
+   154      }
+   155    
+   156      Future<void> _confirmDelete(TradeOrderModel o) async {
+   157        final ok = await showDialog<bool>(
+   158          context: context,
+   159          builder: (ctx) => AlertDialog(
+   160            title: const Text('Hide this order?'),
+   161            content: Text(
+   162              'This will hide the order from your list (soft delete). You can’t hide executed/settled orders.\n\n${o.stockSymbol} ${o.side.toUpperCase()} • Qty ${o.quantity}',
+   163            ),
+   164            actions: [
+   165              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+   166              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Hide')),
+   167            ],
+   168          ),
+   169        );
+   170        if (ok == true) {
+   171          try {
+   172            await _service.softDeleteMyOrder(o.id);
+   173            await _load(reset: true);
+   174            if (!mounted) return;
+   175            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Order hidden')));
+   176          } catch (e) {
+   177            if (!mounted) return;
+   178            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+   179          }
+   180        }
+   181      }
+   182    
+   183      Future<void> _confirmCancel(TradeOrderModel o) async {
+   184        final ok = await showDialog<bool>(
+   185          context: context,
+   186          builder: (ctx) => AlertDialog(
+   187            title: const Text('Cancel order?'),
+   188            content: Text(
+   189              'Only submitted or approved orders can be canceled.\n\n${o.stockSymbol} ${o.side.toUpperCase()} • Qty ${o.quantity}',
+   190            ),
+   191            actions: [
+   192              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
+   193              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Yes, cancel')),
+   194            ],
+   195          ),
+   196        );
+   197        if (ok == true) {
+   198          try {
+   199            await _service.cancelMyOrder(o.id);
+   200            await _load(reset: true);
+   201            if (!mounted) return;
+   202            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Order canceled')));
+   203          } catch (e) {
+   204            if (!mounted) return;
+   205            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+   206          }
+   207        }
+   208      }
+   209    
+   210      void _openSheet(TradeOrderModel o) {
+   211        final isRejected = o.status.toLowerCase() == 'rejected';
+   212        showModalBottomSheet(
+   213          context: context,
+   214          showDragHandle: true,
+   215          isScrollControlled: true,
+   216          builder: (ctx) {
+   217            return Padding(
+   218              padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+   219              child: ListView(
+   220                shrinkWrap: true,
+   221                children: [
+   222                  ListTile(
+   223                    title: Text('${o.stockSymbol} • ${o.side.toUpperCase()}',
+   224                        style: Theme.of(context).textTheme.titleLarge),
+   225                    subtitle: Text('Qty: ${o.quantity} • ${_fmt.format(o.createdAt)}'),
+   226                  ),
+   227                  const Divider(),
+   228                  _kv('Status', o.status.toUpperCase(), valueColor: isRejected ? Colors.red : null),
+   229                  if (isRejected && (o.rejectReason ?? '').trim().isNotEmpty)
+   230                    _kv('Reason', o.rejectReason!.trim()),
+   231                  if (o.brokerName != null) _kv('Broker', o.brokerName!),
+   232                  if (o.totalEstimate != null)
+   233                    _kv('Total estimate', 'MWK ${o.totalEstimate!.toStringAsFixed(2)}'),
+   234                  _kv('Created', _fmt.format(o.createdAt)),
+   235                  _kv('Updated', _fmt.format(o.updatedAt)),
+   236                  const SizedBox(height: 12),
+   237                  Row(
+   238                    children: [
+   239                      Expanded(
+   240                        child: OutlinedButton.icon(
+   241                          icon: const Icon(Icons.open_in_new),
+   242                          label: const Text('Open full screen'),
+   243                          onPressed: () {
+   244                            Navigator.of(ctx).pop();
+   245                            Navigator.of(context).push(
+   246                              MaterialPageRoute(builder: (_) => OrderDetailScreen(orderId: o.id)),
+   247                            );
+   248                          },
+   249                        ),
+   250                      ),
+   251                    ],
+   252                  ),
+   253                ],
+   254              ),
+   255            );
+   256          },
+   257        );
+   258      }
+   259    
+   260      Widget _kv(String k, String v, {Color? valueColor}) {
+   261        return Padding(
+   262          padding: const EdgeInsets.symmetric(vertical: 8),
+   263          child: Row(
+   264            crossAxisAlignment: CrossAxisAlignment.start,
+   265            children: [
+   266              SizedBox(width: 120, child: Text(k, style: const TextStyle(color: Colors.black54))),
+   267              const SizedBox(width: 8),
+   268              Expanded(
+   269                child: Text(
+   270                  v,
+   271                  style: TextStyle(fontWeight: FontWeight.w600, color: valueColor),
+   272                ),
+   273              ),
+   274            ],
+   275          ),
+   276        );
+   277      }
+   278    
+   279      Widget _filters() {
+   280        return SingleChildScrollView(
+   281          scrollDirection: Axis.horizontal,
+   282          padding: const EdgeInsets.symmetric(vertical: 8),
+   283          child: Row(
+   284            children: [
+   285              FilterChip(
+   286                label: const Text('All'),
+   287                selected: _statusFilter == null,
+   288                onSelected: (v) {
+   289                  setState(() => _statusFilter = null);
+   290                  _savePrefs();
+   291                  _load(reset: true);
+   292                },
+   293              ),
+   294              const SizedBox(width: 8),
+   295              ..._statuses.map((s) => Padding(
+   296                    padding: const EdgeInsets.only(left: 8),
+   297                    child: FilterChip(
+   298                      label: Text(s[0].toUpperCase() + s.substring(1)),
+   299                      selected: _statusFilter == s,
+   300                      onSelected: (v) {
+   301                        setState(() => _statusFilter = v ? s : null);
+   302                        _savePrefs();
+   303                        _load(reset: true);
+   304                      },
+   305                    ),
+   306                  )),
+   307            ],
+   308          ),
+   309        );
+   310      }
+   311    
+   312      Future<void> _exportCsv() async {
+   313        try {
+   314          final all = await _service.getMyOrdersFiltered(
+   315            status: _statusFilter,
+   316            ascending: true,
+   317            limit: 2000, // adjust if you want more
+   318          );
+   319          final buf = StringBuffer();
+   320          buf.writeln('Order ID,Date,Stock,Side,Quantity,Status,Broker,Total Estimate,Reject Reason');
+   321          for (final o in all) {
+   322            final dt = DateFormat('yyyy-MM-dd HH:mm').format(o.createdAt);
+   323            final te = (o.totalEstimate ?? 0).toStringAsFixed(2);
+   324            final rr = (o.rejectReason ?? '').replaceAll('"', '""');
+   325            final br = (o.brokerName ?? o.brokerId).replaceAll('"', '""');
+   326            buf.writeln([
+   327              o.id,
+   328              dt,
+   329              o.stockSymbol,
+   330              o.side.toUpperCase(),
+   331              o.quantity,
+   332              o.status.toUpperCase(),
+   333              '"$br"',
+   334              te,
+   335              '"$rr"',
+   336            ].join(','));
+   337          }
+   338          final ok = await downloadCsv('my_orders_${DateTime.now().toIso8601String().substring(0,10)}.csv', buf.toString());
+   339          if (!mounted) return;
+   340          if (ok) {
+   341            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('CSV downloaded')));
+   342          } else {
+   343            ScaffoldMessenger.of(context)
+   344                .showSnackBar(const SnackBar(content: Text('CSV export not supported on this platform')));
+   345          }
+   346        } catch (e) {
+   347          if (!mounted) return;
+   348          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export failed: $e')));
+   349        }
+   350      }
+   351    
+   352      @override
+   353      Widget build(BuildContext context) {
+   354        return Scaffold(
+   355          appBar: AppBar(
+   356            title: const Text('My Orders'),
+   357            actions: [
+   358              IconButton(
+   359                tooltip: 'Export CSV',
+   360                icon: const Icon(Icons.download_outlined),
+   361                onPressed: _exportCsv,
+   362              ),
+   363              PopupMenuButton<OrderSort>(
+   364                tooltip: 'Sort',
+   365                initialValue: _sort,
+   366                onSelected: (val) {
+   367                  setState(() => _sort = val);
+   368                  _savePrefs();
+   369                  _load(reset: true);
+   370                },
+   371                itemBuilder: (ctx) => const [
+   372                  PopupMenuItem(
+   373                    value: OrderSort.newest,
+   374                    child: ListTile(
+   375                      leading: Icon(Icons.arrow_downward),
+   376                      title: Text('Newest first'),
+   377                    ),
+   378                  ),
+   379                  PopupMenuItem(
+   380                    value: OrderSort.oldest,
+   381                    child: ListTile(
+   382                      leading: Icon(Icons.arrow_upward),
+   383                      title: Text('Oldest first'),
+   384                    ),
+   385                  ),
+   386                ],
+   387                icon: const Icon(Icons.sort),
+   388              ),
+   389            ],
+   390          ),
+   391          body: RefreshIndicator(
+   392            onRefresh: () => _load(reset: true),
+   393            child: _loading
+   394                ? const Center(child: CircularProgressIndicator())
+   395                : (_error != null)
+   396                    ? ListView(
+   397                        controller: _scroll,
+   398                        physics: const AlwaysScrollableScrollPhysics(),
+   399                        padding: const EdgeInsets.all(16),
+   400                        children: [
+   401                          const SizedBox(height: 40),
+   402                          Text('Failed to load orders.\n$_error'),
+   403                        ],
+   404                      )
+   405                    : ListView.builder(
+   406                        controller: _scroll,
+   407                        physics: const AlwaysScrollableScrollPhysics(),
+   408                        padding: const EdgeInsets.all(16),
+   409                        itemCount: _orders.length + 2, // filters + items + loader
+   410                        itemBuilder: (context, i) {
+   411                          if (i == 0) return Column(children: [ _filters(), const SizedBox(height: 8) ]);
+   412                          final idx = i - 1;
+   413                          if (idx < _orders.length) {
+   414                            final o = _orders[idx];
+   415                            final isRejected = o.status.toLowerCase() == 'rejected';
+   416                            final canCancel = o.status.toLowerCase() == 'submitted' || o.status.toLowerCase() == 'approved';
+   417                            return Card(
+   418                              child: ListTile(
+   419                                onTap: () => _openSheet(o),
+   420                                title: Text('${o.stockSymbol} ${o.side.toUpperCase()}'),
+   421                                subtitle: Column(
+   422                                  crossAxisAlignment: CrossAxisAlignment.start,
+   423                                  children: [
+   424                                    Text('Qty: ${o.quantity} • ${_fmt.format(o.createdAt)}'),
+   425                                    Row(
+   426                                      children: [
+   427                                        Text(
+   428                                          'Status: ${o.status.toUpperCase()}',
+   429                                          style: TextStyle(
+   430                                            fontWeight: FontWeight.w700,
+   431                                            color: isRejected ? Colors.red : null,
+   432                                          ),
+   433                                        ),
+   434                                        if (isRejected && (o.rejectReason ?? '').trim().isNotEmpty) ...[
+   435                                          const SizedBox(width: 8),
+   436                                          const Text('•'),
+   437                                          const SizedBox(width: 8),
+   438                                          Expanded(
+   439                                            child: Text(
+   440                                              'Reason: ${o.rejectReason!}',
+   441                                              maxLines: 1,
+   442                                              overflow: TextOverflow.ellipsis,
+   443                                              style: const TextStyle(color: Colors.black87),
+   444                                            ),
+   445                                          ),
+   446                                        ],
+   447                                      ],
+   448                                    ),
+   449                                  ],
+   450                                ),
+   451                                trailing: Wrap(
+   452                                  spacing: 4,
+   453                                  children: [
+   454                                    if (canCancel)
+   455                                      IconButton(
+   456                                        icon: const Icon(Icons.cancel_outlined),
+   457                                        tooltip: 'Cancel',
+   458                                        onPressed: () => _confirmCancel(o),
+   459                                      ),
+   460                                    IconButton(
+   461                                      icon: const Icon(Icons.delete_outline),
+   462                                      tooltip: 'Hide',
+   463                                      onPressed: () => _confirmDelete(o),
+   464                                    ),
+   465                                  ],
+   466                                ),
+   467                              ),
+   468                            );
+   469                          }
+   470                          // loader row at end
+   471                          if (_hasMore) {
+   472                            return const Padding(
+   473                              padding: EdgeInsets.symmetric(vertical: 12),
+   474                              child: Center(child: CircularProgressIndicator()),
+   475                            );
+   476                          } else {
+   477                            return const SizedBox.shrink();
+   478                          }
+   479                        },
+   480                      ),
+   481          ),
+   482        );
+   483      }
+   484    }
+
+==== lib/core/services/trade_order_service.dart ====
+-- imports --
+1:import 'package:supabase_flutter/supabase_flutter.dart';
+2:import 'package:mse_market_connect/shared/models/broker_model.dart';
+3:import 'package:mse_market_connect/shared/models/stock_model.dart';
+4:import 'package:mse_market_connect/shared/models/trade_order_model.dart';
+-- content (with line numbers) --
+     1    import 'package:supabase_flutter/supabase_flutter.dart';
+     2    import 'package:mse_market_connect/shared/models/broker_model.dart';
+     3    import 'package:mse_market_connect/shared/models/stock_model.dart';
+     4    import 'package:mse_market_connect/shared/models/trade_order_model.dart';
+     5    
+     6    class TradeOrderService {
+     7      final SupabaseClient _client = Supabase.instance.client;
+     8    
+     9      // Create order (unchanged)
+    10      Future<String> createMarketRequestOrder({
+    11        required StockModel stock,
+    12        required BrokerModel broker,
+    13        required String side,
+    14        required int quantity,
+    15        String? investorNote,
+    16      }) async {
+    17        final user = _client.auth.currentUser;
+    18        if (user == null) throw StateError('User not logged in');
+    19    
+    20        final priceAtSubmission = stock.price;
+    21        final feeRate = broker.feeRate;
+    22    
+    23        final subtotal = quantity * priceAtSubmission;
+    24        final feeAmount = subtotal * feeRate;
+    25        final totalEstimate = subtotal + feeAmount;
+    26    
+    27        final inserted = await _client
+    28            .from('trade_orders')
+    29            .insert({
+    30              'user_id': user.id,
+    31              'broker_id': broker.id,
+    32              'stock_symbol': stock.symbol,
+    33              'side': side,
+    34              'quantity': quantity,
+    35              'price_at_submission': priceAtSubmission,
+    36              'fee_rate': feeRate,
+    37              'fee_amount': feeAmount,
+    38              'total_estimate': totalEstimate,
+    39              'status': 'submitted',
+    40              'investor_note': investorNote,
+    41              'deleted_at': null,
+    42            })
+    43            .select('id')
+    44            .single();
+    45    
+    46        return inserted['id'] as String;
+    47      }
+    48    
+    49      // Legacy helper kept for compatibility
+    50      Future<List<TradeOrderModel>> getMyOrders({int limit = 100}) async {
+    51        final page = await getMyOrdersPage(limit: limit, offset: 0);
+    52        return page.items;
+    53      }
+    54    
+    55      // Filtered (non-paged) helper
+    56      Future<List<TradeOrderModel>> getMyOrdersFiltered({
+    57        String? status,
+    58        bool ascending = false,
+    59        int limit = 200,
+    60      }) async {
+    61        final page = await getMyOrdersPage(status: status, ascending: ascending, limit: limit, offset: 0);
+    62        return page.items;
+    63      }
+    64    
+    65      // Paged API (server-side pagination via range)
+    66      
+    67      Future<OrdersPage> getMyOrdersPage({
+    68        String? status,
+    69        bool ascending = false,
+    70        int limit = 30,
+    71        int offset = 0,
+    72      }) async {
+    73        final user = _client.auth.currentUser;
+    74        if (user == null) throw StateError('User not logged in');
+    75    
+    76        final base = _client
+    77            .from('trade_orders_app') // view with unified reject_reason
+    78            .select('*')
+    79            .eq('user_id', user.id)
+    80            .isFilter('deleted_at', null);
+    81    
+    82        final ordered = (status != null && status.trim().isNotEmpty)
+    83            ? base.eq('status', status).order('created_at', ascending: ascending)
+    84            : base.order('created_at', ascending: ascending);
+    85    
+    86        // inclusive range end -> ask for limit+1 to detect hasMore
+    87        final rows = await ordered.range(offset, offset + limit);
+    88    
+    89        var list = (rows as List).cast<Map<String, dynamic>>();
+    90        final hasMore = list.length > limit;
+    91        if (hasMore) list = list.sublist(0, limit);
+    92    
+    93        final models = list.map((e) => TradeOrderModel.fromMap(e)).toList();
+    94        if (models.isEmpty) return OrdersPage(items: const [], hasMore: false, nextOffset: offset);
+    95    
+    96        final brokerIds = models.map((o) => o.brokerId).toSet().toList();
+    97        final brokersResp = await _client
+    98            .from('brokers')
+    99            .select('id,name')
+   100            .inFilter('id', brokerIds);
+   101    
+   102        final brokers = (brokersResp as List).cast<Map<String, dynamic>>();
+   103        final nameById = {for (final b in brokers) b['id'] as String: b['name'] as String};
+   104    
+   105        final enriched = models.map((o) => o.copyWith(brokerName: nameById[o.brokerId])).toList();
+   106        return OrdersPage(items: enriched, hasMore: hasMore, nextOffset: offset + enriched.length);
+   107      }
+   108    
+   109    
+   110        q = q.order('created_at', ascending: ascending);
+   111    
+   112        // Ask for limit+1 (inclusive range end) to detect "hasMore"
+   113        final rows = await q.range(offset, offset + limit);
+   114    
+   115        var list = (rows as List).cast<Map<String, dynamic>>();
+   116        final hasMore = list.length > limit;
+   117        if (hasMore,) list = list.sublist(0, limit);
+   118    
+   119        // Attach broker names
+   120        final models = list.map((e) => TradeOrderModel.fromMap(e)).toList();
+   121        if (models.isEmpty) return OrdersPage(items: const [], hasMore: false, nextOffset: offset);
+   122    
+   123        final brokerIds = models.map((o) => o.brokerId).toSet().toList();
+   124        final brokersResp = await _client
+   125            .from('brokers')
+   126            .select('id,name')
+   127            .inFilter('id', brokerIds);
+   128    
+   129        final brokers = (brokersResp as List).cast<Map<String, dynamic>>();
+   130        final nameById = {for (final b in brokers) b['id'] as String: b['name'] as String};
+   131    
+   132        final enriched = models.map((o) => o.copyWith(brokerName: nameById[o.brokerId])).toList();
+   133        return OrdersPage(items = enriched, hasMore = hasMore, nextOffset = offset + enriched.length);
+   134      }
+   135    
+   136      // Single order (use the view so reject_reason is unified)
+   137      Future<TradeOrderModel?> getMyOrderById(String orderId) async {
+   138        final user = _client.auth.currentUser;
+   139        if (user == null) throw StateError('User not logged in');
+   140    
+   141        final row = await _client
+   142            .from('trade_orders_app')
+   143            .select('*')
+   144            .eq('user_id', user.id)
+   145            .eq('id', orderId)
+   146            .isFilter('deleted_at', null)
+   147            .maybeSingle();
+   148    
+   149        if (row == null) return null;
+   150        return TradeOrderModel.fromMap(Map<String, dynamic>.from(row));
+   151      }
+   152    
+   153      // Hide (soft delete)
+   154      Future<void> softDeleteMyOrder(String orderId) async {
+   155        final user = _client.auth.currentUser;
+   156        if (user == null) throw StateError('User not logged in');
+   157    
+   158        final row = await _client
+   159            .from('trade_orders')
+   160            .select('status')
+   161            .eq('id', orderId)
+   162            .eq('user_id', user.id)
+   163            .maybeSingle();
+   164    
+   165        final status = (row?['status'] ?? 'submitted').toString().toLowerCase();
+   166        if (status == 'executed' || status == 'settled') {
+   167          throw StateError('Cannot delete an $status order');
+   168        }
+   169    
+   170        await _client
+   171            .from('trade_orders')
+   172            .update({'deleted_at': DateTime.now().toUtc().toIso8601String()})
+   173            .eq('id', orderId)
+   174            .eq('user_id', user.id);
+   175      }
+   176    
+   177      // Cancel (allowed for submitted/approved)
+   178      // Adjust 'canceled' -> 'cancelled' if your DB uses British spelling.
+   179      Future<void> cancelMyOrder(String orderId) async {
+   180        final user = _client.auth.currentUser;
+   181        if (user == null) throw StateError('User not logged in');
+   182    
+   183        final row = await _client
+   184            .from('trade_orders')
+   185            .select('status')
+   186            .eq('id', orderId)
+   187            .eq('user_id', user.id)
+   188            .maybeSingle();
+   189    
+   190        if (row == null) throw StateError('Order not found');
+   191    
+   192        final status = (row['status'] ?? 'submitted').toString().toLowerCase();
+   193        if (status != 'submitted' && status != 'approved') {
+   194          throw StateError('Only submitted/approved orders can be canceled (current: $status)');
+   195        }
+   196    
+   197        await _client
+   198            .from('trade_orders')
+   199            .update({'status': 'canceled', 'updated_at': DateTime.now().toUtc().toIso8601String()})
+   200            .eq('id', orderId)
+   201            .eq('user_id', user.id);
+   202      }
+   203    }
+   204    
+   205    class OrdersPage {
+   206      final List<TradeOrderModel> items;
+   207      final bool hasMore;
+   208      final int nextOffset;
+   209      OrdersPage({required this.items, required this.hasMore, required this.nextOffset});
+   210    }
+
+==== lib/shared/models/trade_order_model.dart ====
+-- imports --
+-- content (with line numbers) --
+     1    class TradeOrderModel {
+     2      final String id;
+     3      final String stockSymbol; // e.g. 'AHL'
+     4      final String side;        // 'buy' | 'sell'
+     5      final int quantity;
+     6      final String status;
+     7    
+     8      final String brokerId;
+     9      final String? brokerName;
+    10    
+    11      final double? totalEstimate;
+    12    
+    13      final String? rejectReason; // optional: reason from broker when status == 'rejected'
+    14    
+    15      final DateTime createdAt;
+    16      final DateTime updatedAt;
+    17    
+    18      const TradeOrderModel({
+    19        required this.id,
+    20        required this.stockSymbol,
+    21        required this.side,
+    22        required this.quantity,
+    23        required this.status,
+    24        required this.brokerId,
+    25        required this.createdAt,
+    26        required this.updatedAt,
+    27        this.brokerName,
+    28        this.totalEstimate,
+    29        this.rejectReason,
+    30      });
+    31    
+    32      factory TradeOrderModel.fromMap(Map<String, dynamic> map) {
+    33        String? rr = map['reject_reason'] as String?;
+    34        rr ??= map['rejection_reason'] as String?;
+    35        rr ??= map['broker_reason'] as String?;
+    36        rr ??= map['reason'] as String?;
+    37    
+    38        return TradeOrderModel(
+    39          id: map['id'] as String,
+    40          stockSymbol: map['stock_symbol'] as String,
+    41          side: map['side'] as String,
+    42          quantity: (map['quantity'] as num).toInt(),
+    43          status: (map['status'] as String?) ?? 'submitted',
+    44          brokerId: map['broker_id'] as String,
+    45          totalEstimate: (map['total_estimate'] as num?)?.toDouble(),
+    46          rejectReason: rr,
+    47          createdAt: DateTime.parse(map['created_at'] as String),
+    48          updatedAt: DateTime.parse(map['updated_at'] as String),
+    49        );
+    50      }
+    51    
+    52      TradeOrderModel copyWith({
+    53        String? brokerName,
+    54        String? rejectReason,
+    55      }) {
+    56        return TradeOrderModel(
+    57          id: id,
+    58          stockSymbol: stockSymbol,
+    59          side: side,
+    60          quantity: quantity,
+    61          status: status,
+    62          brokerId: brokerId,
+    63          brokerName: brokerName ?? this.brokerName,
+    64          totalEstimate: totalEstimate,
+    65          createdAt: createdAt,
+    66          updatedAt: updatedAt,
+    67          rejectReason: rejectReason ?? this.rejectReason,
+    68        );
+    69      }
+    70    }
+
+==== lib/features/trade/presentation/order_detail_screen.dart ====
+-- imports --
+1:import 'package:flutter/material.dart';
+2:import 'package:mse_market_connect/core/services/trade_order_service.dart';
+3:import 'package:mse_market_connect/shared/models/trade_order_model.dart';
+-- content (with line numbers) --
+     1    import 'package:flutter/material.dart';
+     2    import 'package:mse_market_connect/core/services/trade_order_service.dart';
+     3    import 'package:mse_market_connect/shared/models/trade_order_model.dart';
+     4    
+     5    class OrderDetailScreen extends StatefulWidget {
+     6      final String orderId;
+     7      const OrderDetailScreen({super.key, required this.orderId});
+     8    
+     9      @override
+    10      State<OrderDetailScreen> createState() => _OrderDetailScreenState();
+    11    }
+    12    
+    13    class _OrderDetailScreenState extends State<OrderDetailScreen> {
+    14      final _service = TradeOrderService();
+    15      late Future<TradeOrderModel?> _future;
+    16    
+    17      @override
+    18      void initState() {
+    19        super.initState();
+    20        _future = _service.getMyOrderById(widget.orderId);
+    21      }
+    22    
+    23      Future<void> _refresh() async {
+    24        setState(() => _future = _service.getMyOrderById(widget.orderId));
+    25        await _future;
+    26      }
+    27    
+    28      @override
+    29      Widget build(BuildContext context) {
+    30        return Scaffold(
+    31          appBar: AppBar(title: const Text('Order Tracking')),
+    32          body: RefreshIndicator(
+    33            onRefresh: _refresh,
+    34            child: FutureBuilder<TradeOrderModel?>(
+    35              future: _future,
+    36              builder: (context, snapshot) {
+    37                if (snapshot.connectionState == ConnectionState.waiting) {
+    38                  return const Center(child: CircularProgressIndicator());
+    39                }
+    40                if (snapshot.hasError) {
+    41                  return ListView(
+    42                    physics: const AlwaysScrollableScrollPhysics(),
+    43                    padding: const EdgeInsets.all(16),
+    44                    children: [Text('Failed to load order.\n${snapshot.error}')],
+    45                  );
+    46                }
+    47    
+    48                final o = snapshot.data;
+    49                if (o == null) {
+    50                  return ListView(
+    51                    physics: const AlwaysScrollableScrollPhysics(),
+    52                    padding: const EdgeInsets.all(16),
+    53                    children: const [SizedBox(height: 40), Center(child: Text('Order not found.'))],
+    54                  );
+    55                }
+    56    
+    57                return ListView(
+    58                  physics: const AlwaysScrollableScrollPhysics(),
+    59                  padding: const EdgeInsets.all(16),
+    60                  children: [
+    61                    Card(
+    62                      child: Padding(
+    63                        padding: const EdgeInsets.all(16),
+    64                        child: Column(
+    65                          crossAxisAlignment: CrossAxisAlignment.start,
+    66                          children: [
+    67                            Text('${o.stockSymbol} • ${o.side.toUpperCase()}',
+    68                                style: Theme.of(context).textTheme.titleLarge),
+    69                            const SizedBox(height: 8),
+    70                            Text('Quantity: ${o.quantity}'),
+    71                            Text('Broker: ${o.brokerName ?? o.brokerId}'),
+    72                            const SizedBox(height: 8),
+    73                            Text('Status: ${o.status.toUpperCase()}'),
+    74                            const SizedBox(height: 8),
+    75                            Text('Created: ${o.createdAt}'),
+    76                            Text('Updated: ${o.updatedAt}'),
+    77                            if (o.totalEstimate != null)
+    78                              Text('Total estimate: MWK ${o.totalEstimate!.toStringAsFixed(2)}'),
+    79                          ],
+    80                        ),
+    81                      ),
+    82                    ),
+    83                  ],
+    84                );
+    85              },
+    86            ),
+    87          ),
+    88        );
+    89      }
+    90    }
+
+==== method references (service calls) ====
+lib/core/services/trade_order_service.dart:50:  Future<List<TradeOrderModel>> getMyOrders({int limit = 100}) async {
+lib/core/services/trade_order_service.dart:51:    final page = await getMyOrdersPage(limit: limit, offset: 0);
+lib/core/services/trade_order_service.dart:56:  Future<List<TradeOrderModel>> getMyOrdersFiltered({
+lib/core/services/trade_order_service.dart:61:    final page = await getMyOrdersPage(status: status, ascending: ascending, limit: limit, offset: 0);
+lib/core/services/trade_order_service.dart:67:  Future<OrdersPage> getMyOrdersPage({
+lib/core/services/trade_order_service.dart:137:  Future<TradeOrderModel?> getMyOrderById(String orderId) async {
+lib/core/services/trade_order_service.dart:154:  Future<void> softDeleteMyOrder(String orderId) async {
+lib/core/services/trade_order_service.dart:179:  Future<void> cancelMyOrder(String orderId) async {
+lib/core/services/trade_order_service.dart.bak.20260804_094044:50:  Future<List<TradeOrderModel>> getMyOrders({int limit = 100}) async {
+lib/core/services/trade_order_service.dart.bak.20260804_094044:51:    final page = await getMyOrdersPage(limit: limit, offset: 0);
+lib/core/services/trade_order_service.dart.bak.20260804_094044:56:  Future<List<TradeOrderModel>> getMyOrdersFiltered({
+lib/core/services/trade_order_service.dart.bak.20260804_094044:61:    final page = await getMyOrdersPage(status: status, ascending: ascending, limit: limit, offset: 0);
+lib/core/services/trade_order_service.dart.bak.20260804_094044:66:  Future<OrdersPage> getMyOrdersPage({
+lib/core/services/trade_order_service.dart.bak.20260804_094044:112:  Future<TradeOrderModel?> getMyOrderById(String orderId) async {
+lib/core/services/trade_order_service.dart.bak.20260804_094044:129:  Future<void> softDeleteMyOrder(String orderId) async {
+lib/core/services/trade_order_service.dart.bak.20260804_094044:154:  Future<void> cancelMyOrder(String orderId) async {
+lib/core/services/trade_order_service.dart.bak.20260804_092951:48:  Future<List<TradeOrderModel>> getMyOrders({int limit = 100}) async {
+lib/core/services/trade_order_service.dart.bak.20260804_092951:82:  Future<TradeOrderModel?> getMyOrderById(String orderId) async {
+lib/core/services/trade_order_service.dart.bak.20260804_092951:98:  Future<void> softDeleteMyOrder(String orderId) async {
+lib/core/services/trade_order_service.dart.bak.20260803_172102:48:  Future<List<TradeOrderModel>> getMyOrders({int limit = 100}) async {
+lib/core/services/trade_order_service.dart.bak.20260803_172102:83:  Future<TradeOrderModel?> getMyOrderById(String orderId) async {
+lib/core/services/trade_order_service.dart.bak.20260803_172102:101:  Future<void> softDeleteMyOrder(String orderId) async {
+lib/core/services/trade_order_service.dart.bak.20260803_154908:48:  Future<List<TradeOrderModel>> getMyOrders({int limit = 50}) async {
+lib/core/services/trade_order_service.dart.bak.20260803_154908:84:  Future<void> softDeleteMyOrder(String orderId) async {
+lib/core/services/trade_order_service.dart.bak.20260803_154908:107:Future<TradeOrderModel?> getMyOrderById(String orderId) async {
+lib/core/services/trade_order_service.dart.bak.20260803_095433:48:  Future<List<TradeOrderModel>> getMyOrders({int limit = 50}) async {
+lib/core/services/trade_order_service.dart.bak.20260803_095433:84:  Future<void> softDeleteMyOrder(String orderId) async {
+lib/features/trade/presentation/my_orders_screen.dart.bak.20260804_092951:37:      final items = await _service.getMyOrders(limit: 200);
+lib/features/trade/presentation/my_orders_screen.dart.bak.20260804_092951:69:        await _service.softDeleteMyOrder(o.id);
+lib/features/trade/presentation/order_detail_screen.dart:20:    _future = _service.getMyOrderById(widget.orderId);
+lib/features/trade/presentation/order_detail_screen.dart:24:    setState(() => _future = _service.getMyOrderById(widget.orderId));
+lib/features/trade/presentation/my_orders_screen.dart.bak.20260803_154908:20:    _future = _service.getMyOrders(limit: 100);
+lib/features/trade/presentation/my_orders_screen.dart.bak.20260803_154908:24:    setState(() => _future = _service.getMyOrders(limit: 100));
+lib/features/trade/presentation/my_orders_screen.dart.bak.20260803_154908:62:    await _service.softDeleteMyOrder(o.id);
+lib/features/trade/presentation/my_orders_screen.dart:101:      final page = await _service.getMyOrdersPage(
+lib/features/trade/presentation/my_orders_screen.dart:172:        await _service.softDeleteMyOrder(o.id);
+lib/features/trade/presentation/my_orders_screen.dart:199:        await _service.cancelMyOrder(o.id);
+lib/features/trade/presentation/my_orders_screen.dart:314:      final all = await _service.getMyOrdersFiltered(
+lib/features/portfolio/presentation/portfolio_screen.dart.bak.20260803_095432:61:    final o = await _orderService.getMyOrders(limit: 5);
+lib/features/portfolio/presentation/portfolio_screen.dart:62:    final o = await _orderService.getMyOrders(limit: 5);
+
+==== service signatures (first line only) ====
+50:  Future<List<TradeOrderModel>> getMyOrders({int limit = 100}) async {
+56:  Future<List<TradeOrderModel>> getMyOrdersFiltered({
+67:  Future<OrdersPage> getMyOrdersPage({
+137:  Future<TradeOrderModel?> getMyOrderById(String orderId) async {
+154:  Future<void> softDeleteMyOrder(String orderId) async {
+179:  Future<void> cancelMyOrder(String orderId) async {
+
+==== pubspec name/version ====
+1:name: mse_market_connect
+19:version: 1.0.0+1
+
+==== dart analyze (subset) ====
+Analyzing trade_order_service.dart, my_orders_screen.dart...
+
+  error - lib/core/services/trade_order_service.dart:67:10 - The name 'OrdersPage' isn't a type, so it can't be used as a type argument. Try correcting the name to an existing type, or defining a type named 'OrdersPage'. - non_type_as_type_argument
+  error - lib/core/services/trade_order_service.dart:110:5 - The type of 'q' can't be inferred because it depends on itself through the cycle: q. Try adding an explicit type to one or more of the variables in the cycle in order to break the cycle. - top_level_cycle
+  error - lib/core/services/trade_order_service.dart:110:5 - Variables must be declared using the keywords 'const', 'final', 'var' or a type name. Try adding the name of the type of the variable or the keyword 'var'. - missing_const_final_var_or_type
+  error - lib/core/services/trade_order_service.dart:110:9 - The instance member 'q' can't be accessed in an initializer. Try replacing the reference to the instance member with a different expression - implicit_this_reference_in_initializer
+  error - lib/core/services/trade_order_service.dart:110:42 - Undefined name 'ascending'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib/core/services/trade_order_service.dart:113:18 - The await expression can only be used in an async function. Try marking the function body with either 'async' or 'async*'. - await_in_wrong_context
+  error - lib/core/services/trade_order_service.dart:113:24 - The instance member 'q' can't be accessed in an initializer. Try replacing the reference to the instance member with a different expression - implicit_this_reference_in_initializer
+  error - lib/core/services/trade_order_service.dart:113:32 - Undefined name 'offset'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib/core/services/trade_order_service.dart:113:40 - Undefined name 'offset'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib/core/services/trade_order_service.dart:113:49 - Undefined name 'limit'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib/core/services/trade_order_service.dart:115:17 - The instance member 'rows' can't be accessed in an initializer. Try replacing the reference to the instance member with a different expression - implicit_this_reference_in_initializer
+  error - lib/core/services/trade_order_service.dart:116:21 - The instance member 'list' can't be accessed in an initializer. Try replacing the reference to the instance member with a different expression - implicit_this_reference_in_initializer
+  error - lib/core/services/trade_order_service.dart:116:26 - The getter 'length' isn't defined for the type '(InvalidType,)'. Try importing the library that defines 'length', correcting the name to the name of an existing getter, or defining a getter or field named 'length'. - undefined_getter
+  error - lib/core/services/trade_order_service.dart:116:35 - Undefined name 'limit'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib/core/services/trade_order_service.dart:117:5 - Expected a class member. Try placing this code inside a class member. - expected_class_member
+  error - lib/core/services/trade_order_service.dart:117:9 - Undefined class 'hasMore'. Try changing the name to the name of an existing class, or creating a class with the name 'hasMore'. - undefined_class
+  error - lib/core/services/trade_order_service.dart:117:19 - The name 'list' is already defined. Try renaming one of the declarations. - duplicate_definition
+           - The first definition of this name at lib/core/services/trade_order_service.dart:115:9.
+  error - lib/core/services/trade_order_service.dart:117:26 - The instance member 'list' can't be accessed in an initializer. Try replacing the reference to the instance member with a different expression - implicit_this_reference_in_initializer
+  error - lib/core/services/trade_order_service.dart:117:31 - The method 'sublist' isn't defined for the type '<unknown>'. Try correcting the name to the name of an existing method, or defining a method named 'sublist'. - undefined_method
+  error - lib/core/services/trade_order_service.dart:117:42 - Undefined name 'limit'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib/core/services/trade_order_service.dart:120:20 - The instance member 'list' can't be accessed in an initializer. Try replacing the reference to the instance member with a different expression - implicit_this_reference_in_initializer
+  error - lib/core/services/trade_order_service.dart:120:25 - The method 'map' isn't defined for the type '<unknown>'. Try correcting the name to the name of an existing method, or defining a method named 'map'. - undefined_method
+  error - lib/core/services/trade_order_service.dart:121:5 - Expected a class member. Try placing this code inside a class member. - expected_class_member
+  error - lib/core/services/trade_order_service.dart:121:8 - Expected an identifier. - missing_identifier
+  error - lib/core/services/trade_order_service.dart:121:9 - The prefix 'models' can't be used here because it's shadowed by a local declaration. Try renaming either the prefix or the local declaration. - prefix_shadowed_by_local_declaration
+  error - lib/core/services/trade_order_service.dart:121:23 - Expected an identifier. - missing_identifier
+  error - lib/core/services/trade_order_service.dart:121:25 - A function body must be provided. Try adding a function body. - missing_function_body
+  error - lib/core/services/trade_order_service.dart:121:88 - Undefined name 'offset'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib/core/services/trade_order_service.dart:123:23 - The instance member 'models' can't be accessed in an initializer. Try replacing the reference to the instance member with a different expression - implicit_this_reference_in_initializer
+  error - lib/core/services/trade_order_service.dart:124:25 - The await expression can only be used in an async function. Try marking the function body with either 'async' or 'async*'. - await_in_wrong_context
+  error - lib/core/services/trade_order_service.dart:124:31 - The instance member '_client' can't be accessed in an initializer. Try replacing the reference to the instance member with a different expression - implicit_this_reference_in_initializer
+  error - lib/core/services/trade_order_service.dart:127:25 - The instance member 'brokerIds' can't be accessed in an initializer. Try replacing the reference to the instance member with a different expression - implicit_this_reference_in_initializer
+  error - lib/core/services/trade_order_service.dart:129:22 - The instance member 'brokersResp' can't be accessed in an initializer. Try replacing the reference to the instance member with a different expression - implicit_this_reference_in_initializer
+  error - lib/core/services/trade_order_service.dart:130:39 - The instance member 'brokers' can't be accessed in an initializer. Try replacing the reference to the instance member with a different expression - implicit_this_reference_in_initializer
+  error - lib/core/services/trade_order_service.dart:132:22 - The instance member 'models' can't be accessed in an initializer. Try replacing the reference to the instance member with a different expression - implicit_this_reference_in_initializer
+  error - lib/core/services/trade_order_service.dart:132:63 - The instance member 'nameById' can't be accessed in an initializer. Try replacing the reference to the instance member with a different expression - implicit_this_reference_in_initializer
+  error - lib/core/services/trade_order_service.dart:133:5 - Expected a class member. Try placing this code inside a class member. - expected_class_member
+  error - lib/core/services/trade_order_service.dart:133:12 - 'OrdersPage' must have a method body because 'TradeOrderService' isn't abstract. Try making 'TradeOrderService' abstract, or adding a body to 'OrdersPage'. - concrete_class_with_abstract_member
+  error - lib/core/services/trade_order_service.dart:133:29 - Named parameters must be enclosed in curly braces ('{' and '}'). Try surrounding the named parameters in curly braces. - named_parameter_outside_group
+  error - lib/core/services/trade_order_service.dart:133:31 - The instance member 'enriched' can't be accessed in an initializer. Try replacing the reference to the instance member with a different expression - implicit_this_reference_in_initializer
+  error - lib/core/services/trade_order_service.dart:133:49 - Named parameters must be enclosed in curly braces ('{' and '}'). Try surrounding the named parameters in curly braces. - named_parameter_outside_group
+  error - lib/core/services/trade_order_service.dart:133:51 - The instance member 'hasMore' can't be accessed in an initializer. Try replacing the reference to the instance member with a different expression - implicit_this_reference_in_initializer
+  error - lib/core/services/trade_order_service.dart:133:71 - Named parameters must be enclosed in curly braces ('{' and '}'). Try surrounding the named parameters in curly braces. - named_parameter_outside_group
+  error - lib/core/services/trade_order_service.dart:133:73 - Undefined name 'offset'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib/core/services/trade_order_service.dart:133:82 - The instance member 'enriched' can't be accessed in an initializer. Try replacing the reference to the instance member with a different expression - implicit_this_reference_in_initializer
+  error - lib/core/services/trade_order_service.dart:138:18 - Undefined name '_client'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib/core/services/trade_order_service.dart:141:23 - Undefined name '_client'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib/core/services/trade_order_service.dart:155:18 - Undefined name '_client'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib/core/services/trade_order_service.dart:158:23 - Undefined name '_client'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib/core/services/trade_order_service.dart:170:11 - Undefined name '_client'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib/core/services/trade_order_service.dart:180:18 - Undefined name '_client'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib/core/services/trade_order_service.dart:183:23 - Undefined name '_client'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib/core/services/trade_order_service.dart:197:11 - Undefined name '_client'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib/core/services/trade_order_service.dart:203:1 - Expected a method, getter, setter or operator declaration. This appears to be incomplete code. Try removing it or completing it. - expected_executable
+  error - lib/features/trade/presentation/my_orders_screen.dart:172:24 - The method 'softDeleteMyOrder' isn't defined for the type 'TradeOrderService'. Try correcting the name to the name of an existing method, or defining a method named 'softDeleteMyOrder'. - undefined_method
+  error - lib/features/trade/presentation/my_orders_screen.dart:199:24 - The method 'cancelMyOrder' isn't defined for the type 'TradeOrderService'. Try correcting the name to the name of an existing method, or defining a method named 'cancelMyOrder'. - undefined_method
+warning - lib/core/services/trade_order_service.dart:6:7 - The declaration '<unnamed>' isn't referenced. Try removing the declaration of '<unnamed>'. - unused_element
+   info - lib/core/services/trade_order_service.dart:133:12 - Missing type annotation. Try adding a type annotation. - strict_top_level_inference
+   info - lib/core/services/trade_order_service.dart:133:12 - The variable name 'OrdersPage' isn't a lowerCamelCase identifier. Try changing the name to follow the lowerCamelCase style. - non_constant_identifier_names
+   info - lib/core/services/trade_order_service.dart:133:23 - Missing type annotation. Try adding a type annotation. - strict_top_level_inference
+   info - lib/core/services/trade_order_service.dart:133:41 - Missing type annotation. Try adding a type annotation. - strict_top_level_inference
+   info - lib/core/services/trade_order_service.dart:133:60 - Missing type annotation. Try adding a type annotation. - strict_top_level_inference
+
+62 issues found.
+

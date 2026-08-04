@@ -3,10 +3,7 @@ import 'package:flutter/material.dart';
 class OrderSuccessScreen extends StatelessWidget {
   final String orderId;
 
-  const OrderSuccessScreen({
-    super.key,
-    required this.orderId,
-  });
+  const OrderSuccessScreen({super.key, required this.orderId});
 
   @override
   Widget build(BuildContext context) {
@@ -26,10 +23,7 @@ class OrderSuccessScreen extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
-            Text(
-              'Order ID:\n$orderId',
-              textAlign: TextAlign.center,
-            ),
+            Text('Order ID:\n$orderId', textAlign: TextAlign.center),
             const SizedBox(height: 16),
             const Card(
               child: Padding(
@@ -44,7 +38,8 @@ class OrderSuccessScreen extends StatelessWidget {
             SizedBox(
               height: 52,
               child: ElevatedButton(
-                onPressed: () => Navigator.of(context).popUntil((r) => r.isFirst),
+                onPressed: () =>
+                    Navigator.of(context).popUntil((r) => r.isFirst),
                 child: const Text('Back to Home'),
               ),
             ),

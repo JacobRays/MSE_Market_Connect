@@ -30,7 +30,8 @@ class AdminSubscriptionService {
   }
 
   Future<Map<String, SubscriptionModel>> getSubscriptionsByUserIds(
-      List<String> userIds) async {
+    List<String> userIds,
+  ) async {
     if (userIds.isEmpty) return {};
 
     final response = await _client
@@ -46,34 +47,25 @@ class AdminSubscriptionService {
     };
   }
 
-  Future<void> setPremium({
-    required String userId,
-    int days = 30,
-  }) async {
+  Future<void> setPremium({required String userId, int days = 30}) async {
     final expires = DateTime.now().add(Duration(days: days)).toIso8601String();
 
-    await _client.from('subscriptions').upsert(
-      {
-        'user_id': userId,
-        'plan': 'premium',
-        'status': 'active',
-        'current_period_end': expires,
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-      onConflict: 'user_id',
-    );
+    await _client.from('subscriptions').upsert({
+      'user_id': userId,
+      'plan': 'premium',
+      'status': 'active',
+      'current_period_end': expires,
+      'updated_at': DateTime.now().toIso8601String(),
+    }, onConflict: 'user_id');
   }
 
   Future<void> setFree({required String userId}) async {
-    await _client.from('subscriptions').upsert(
-      {
-        'user_id': userId,
-        'plan': 'free',
-        'status': 'active',
-        'current_period_end': null,
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-      onConflict: 'user_id',
-    );
+    await _client.from('subscriptions').upsert({
+      'user_id': userId,
+      'plan': 'free',
+      'status': 'active',
+      'current_period_end': null,
+      'updated_at': DateTime.now().toIso8601String(),
+    }, onConflict: 'user_id');
   }
 }

@@ -4,6 +4,7 @@ import 'package:mse_market_connect/core/services/broker_user_service.dart';
 import 'package:mse_market_connect/shared/models/broker_model.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'broker_order_detail_screen.dart';
+import 'package:mse_market_connect/core/services/broker_service_x.dart';
 
 class BrokerDashboardScreen extends StatefulWidget {
   const BrokerDashboardScreen({super.key});
@@ -34,22 +35,49 @@ class _BrokerDashboardScreenState extends State<BrokerDashboardScreen> {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) throw StateError('Not logged in');
 
-      final profile = await Supabase.instance.client.from('profiles').select('role').eq('id', user.id).maybeSingle();
+      final profile = await Supabase.instance.client
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
       _isAdmin = (profile?['role'] as String?) == 'admin';
 
       if (_isAdmin) {
-        _brokers = await _brokerService.getActiveBrokers();
-        if (_brokers.isNotEmpty) _selectedBroker = _brokers.first;
+        final raw = await _brokerService.getActiveBrokersUnique();
+        final deduped = _dedupeBrokersByName(raw);
+        if (raw.length != deduped.length) {
+          // ignore: avoid_print
+          print(
+            'BrokerDashboardScreen: removed ${raw.length - deduped.length} duplicate broker(s) by name',
+          );
+        }
+        deduped.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
+        _brokers = deduped;
+
+        if (_brokers.isNotEmpty) {
+          final currentId = _selectedBroker?.id;
+          _selectedBroker = currentId != null
+              ? (_brokers.firstWhere(
+                  (b) => b.id == currentId,
+                  orElse: () => _brokers.first,
+                ))
+              : _brokers.first;
+        }
       } else {
         final row = await _brokerUserService.getMyBrokerUserRow();
         _brokerId = row?['broker_id'] as String?;
       }
+
       await _loadOrders();
       if (mounted) setState(() => _loading = false);
     } catch (e) {
       if (mounted) {
         setState(() => _loading = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -58,10 +86,11 @@ class _BrokerDashboardScreenState extends State<BrokerDashboardScreen> {
     final brokerIdToUse = _isAdmin ? _selectedBroker?.id : _brokerId;
     if (brokerIdToUse == null) return;
 
-    // Use explicit join syntax
     final resp = await Supabase.instance.client
         .from('trade_orders')
-        .select('id, stock_symbol, side, quantity, status, total_estimate, created_at, profiles!user_id(email, full_name)')
+        .select(
+          'id, stock_symbol, side, quantity, status, total_estimate, created_at, profiles!user_id(email, full_name)',
+        )
         .eq('broker_id', brokerIdToUse)
         .order('created_at', ascending: false);
 
@@ -70,31 +99,55 @@ class _BrokerDashboardScreenState extends State<BrokerDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     return Scaffold(
-      appBar: AppBar(title: Text(_isAdmin ? 'Broker Portal (Admin)' : 'Broker Portal')),
+      appBar: AppBar(
+        title: Text(_isAdmin ? 'Broker Portal (Admin)' : 'Broker Portal'),
+      ),
       body: RefreshIndicator(
-        onRefresh: () async { await _loadOrders(); setState(() {}); },
+        onRefresh: () async {
+          await _loadOrders();
+          setState(() {});
+        },
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            if (_isAdmin) 
+            if (_isAdmin)
               DropdownButtonFormField<BrokerModel>(
                 initialValue: _selectedBroker,
-                items: _brokers.map((b) => DropdownMenuItem(value: b, child: Text(b.name))).toList(),
-                onChanged: (b) { _selectedBroker = b; _loadOrders(); setState(() {}); },
-                decoration: const InputDecoration(labelText: 'Select Broker Inbox'),
+                items: _brokers
+                    .map((b) => DropdownMenuItem(value: b, child: Text(b.name)))
+                    .toList(),
+                onChanged: (b) {
+                  _selectedBroker = b;
+                  _loadOrders();
+                  setState(() {});
+                },
+                decoration: const InputDecoration(
+                  labelText: 'Select Broker Inbox',
+                ),
               ),
             const SizedBox(height: 20),
             ..._orders.map((o) {
               final profile = o['profiles'] as Map<String, dynamic>?;
               return Card(
                 child: ListTile(
-                  title: Text('${o['stock_symbol']} - ${o['side'].toString().toUpperCase()}'),
-                  subtitle: Text('From: ${profile?['email'] ?? 'Unknown'}\nQty: ${o['quantity']} | Status: ${o['status']}'),
+                  title: Text(
+                    '${o['stock_symbol']} - ${o['side'].toString().toUpperCase()}',
+                  ),
+                  subtitle: Text(
+                    'From: ${profile?['email'] ?? 'Unknown'}\nQty: ${o['quantity']} | Status: ${o['status']}',
+                  ),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => BrokerOrderDetailScreen(orderId: o['id']))).then((_) => _init()),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => BrokerOrderDetailScreen(orderId: o['id']),
+                    ),
+                  ).then((_) => _init()),
                 ),
               );
             }),
@@ -103,4 +156,14 @@ class _BrokerDashboardScreenState extends State<BrokerDashboardScreen> {
       ),
     );
   }
+}
+
+List<BrokerModel> _dedupeBrokersByName(List<BrokerModel> list) {
+  final seen = <String>{};
+  final out = <BrokerModel>[];
+  for (final b in list) {
+    final key = b.name.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+    if (seen.add(key)) out.add(b);
+  }
+  return out;
 }
