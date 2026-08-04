@@ -1,3 +1,116 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+STATUS_SVC="lib/core/services/market_status_service.dart"
+SCREEN="lib/features/market/presentation/market_screen.dart"
+
+backup() { [[ -f "$1" ]] && cp -a "$1" "$1.bak.$(date +%Y%m%d_%H%M%S)" && echo "Backup: $1.bak.*"; }
+
+# 1) Add a small MarketStatus service (Supabase-backed if table exists, with heuristics fallback)
+mkdir -p "$(dirname "$STATUS_SVC")"
+cat > "$STATUS_SVC" << 'DART'
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:mse_market_connect/shared/models/stock_model.dart';
+
+class MarketStatusData {
+  final String status; // 'open' | 'closed' | 'holiday' | 'unknown'
+  final String source; // 'supabase' | 'heuristic'
+  final DateTime checkedAt;
+  final String? message;
+  const MarketStatusData({
+    required this.status,
+    required this.source,
+    required this.checkedAt,
+    this.message,
+  });
+}
+
+class MarketStatusService {
+  final SupabaseClient _db = Supabase.instance.client;
+
+  // Primary: try Supabase table 'market_status' (status, message, updated_at)
+  // Fallback: infer from stocks' changePercent + Malawi time window
+  Future<MarketStatusData> getStatus({List<StockModel>? snapshot}) async {
+    try {
+      final row = await _db
+          .from('market_status')
+          .select('status, message, updated_at')
+          .order('updated_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+      if (row != null) {
+        final st = (row['status'] ?? '').toString().toLowerCase();
+        final norm = _normalize(st);
+        final when = DateTime.tryParse((row['updated_at'] ?? '').toString()) ?? DateTime.now().toUtc();
+        return MarketStatusData(
+          status: norm,
+          source: 'supabase',
+          checkedAt: when,
+          message: (row['message'] ?? '').toString(),
+        );
+      }
+    } catch (_) {
+      // table may not exist yet; ignore
+    }
+    // Heuristic fallback
+    return _inferFromStocks(snapshot);
+  }
+
+  MarketStatusData _inferFromStocks(List<StockModel>? stocks) {
+    final nowUtc = DateTime.now().toUtc();
+    // Malawi time is UTC+2 (CAT). No DST.
+    final mw = nowUtc.add(const Duration(hours: 2));
+    final isWeekday = mw.weekday >= DateTime.monday && mw.weekday <= DateTime.friday;
+    final inWindow = (mw.hour > 9 && mw.hour < 16) || (mw.hour == 9 && mw.minute >= 0) || (mw.hour == 16 && mw.minute == 0);
+
+    bool anyMovement = false;
+    DateTime? latest;
+    if (stocks != null && stocks.isNotEmpty) {
+      anyMovement = stocks.any((s) => s.changePercent.abs() > 1e-6);
+      for (final s in stocks) {
+        final t = s.updatedAt;
+        if (t != null && (latest == null || t.isAfter(latest!))) latest = t;
+      }
+    }
+    // If any stock moved today during window, call it open
+    if (anyMovement && isWeekday && inWindow) {
+      return MarketStatusData(
+        status: 'open',
+        source: 'heuristic',
+        checkedAt: nowUtc,
+        message: 'Movement detected',
+      );
+    }
+    // Else, likely closed (or pre-open). Add a soft hint if within window.
+    final msg = isWeekday && inWindow ? 'No movement yet' : 'Outside trading hours';
+    return MarketStatusData(
+      status: 'closed',
+      source: 'heuristic',
+      checkedAt: nowUtc,
+      message: msg,
+    );
+  }
+
+  String _normalize(String s) {
+    switch (s) {
+      case 'open':
+      case 'opened':
+        return 'open';
+      case 'closed':
+      case 'close':
+        return 'closed';
+      case 'holiday':
+        return 'holiday';
+      default:
+        return 'unknown';
+    }
+  }
+}
+DART
+
+# 2) Replace MarketScreen with placeholders + status chip
+backup "$SCREEN"
+cat > "$SCREEN" << 'DART'
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -88,7 +201,7 @@ class _MarketScreenState extends State<MarketScreen> {
       }
 
       await _loadActiveAlerts();
-      _loadStatusDebounced();
+      _loadStatusDebounced(); // update status after stocks load
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -178,6 +291,7 @@ class _MarketScreenState extends State<MarketScreen> {
               }
             });
 
+            // refresh market status (debounced) when a stock changes
             _loadStatusDebounced();
           },
         )
@@ -226,37 +340,29 @@ class _MarketScreenState extends State<MarketScreen> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(color: c, shape: BoxShape.circle),
-        ),
+        Container(width: 10, height: 10, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
         const SizedBox(width: 6),
-        Text(
-          'Market: $label',
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
+        Text('Market: $label', style: const TextStyle(fontWeight: FontWeight.w700)),
         if (sub != null) ...[
           const SizedBox(width: 8),
-          Text(
-            sub,
-            style: const TextStyle(color: Colors.black54, fontSize: 12),
-          ),
-        ],
+          Text(sub, style: const TextStyle(color: Colors.black54, fontSize: 12)),
+        ]
       ],
     );
   }
 
-  Widget _emptyHint(String title, String line) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 6),
-          Text(line, style: const TextStyle(color: Colors.black54)),
-        ],
+  Widget _emptyCard(String title, String line) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 6),
+            Text(line, style: const TextStyle(color: Colors.black54)),
+          ],
+        ),
       ),
     );
   }
@@ -379,81 +485,59 @@ class _MarketScreenState extends State<MarketScreen> {
                       ),
                     ],
                   ] else ...[
-                    _SectionBox(
-                      title: 'Gainers',
-                      child: Column(
-                        children: [
-                          if (gainers.isEmpty)
-                            _emptyHint(
-                              'No gainers yet',
-                              'Prices haven’t moved up today.',
-                            ),
-                          ...gainers.map(
-                            (s) => _StockCard(
-                              stock: s,
-                              alert: _activeAlertBySymbol[s.symbol],
-                              flashDir: _flashDir[s.symbol] ?? 0,
-                              onTrade: () => MarketActionSheet.show(context, s),
-                              onOpen: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => StockDetailScreen(stock: s),
-                                ),
-                              ),
-                            ),
+                    _SectionHeader(title: 'Gainers'),
+                    const SizedBox(height: 8),
+                    if (gainers.isEmpty)
+                      _emptyCard('No gainers yet', 'Prices haven’t moved up today.'),
+                    ...gainers.map(
+                      (s) => _StockCard(
+                        stock: s,
+                        alert: _activeAlertBySymbol[s.symbol],
+                        flashDir: _flashDir[s.symbol] ?? 0,
+                        onTrade: () => MarketActionSheet.show(context, s),
+                        onOpen: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => StockDetailScreen(stock: s),
                           ),
-                        ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    _SectionBox(
-                      title: 'Losers',
-                      child: Column(
-                        children: [
-                          if (losers.isEmpty)
-                            _emptyHint(
-                              'No losers yet',
-                              'Prices haven’t moved down today.',
-                            ),
-                          ...losers.map(
-                            (s) => _StockCard(
-                              stock: s,
-                              alert: _activeAlertBySymbol[s.symbol],
-                              flashDir: _flashDir[s.symbol] ?? 0,
-                              onTrade: () => MarketActionSheet.show(context, s),
-                              onOpen: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => StockDetailScreen(stock: s),
-                                ),
-                              ),
-                            ),
+
+                    _SectionHeader(title: 'Losers'),
+                    const SizedBox(height: 8),
+                    if (losers.isEmpty)
+                      _emptyCard('No losers yet', 'Prices haven’t moved down today.'),
+                    ...losers.map(
+                      (s) => _StockCard(
+                        stock: s,
+                        alert: _activeAlertBySymbol[s.symbol],
+                        flashDir: _flashDir[s.symbol] ?? 0,
+                        onTrade: () => MarketActionSheet.show(context, s),
+                        onOpen: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => StockDetailScreen(stock: s),
                           ),
-                        ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    _SectionBox(
-                      title: 'Unchanged',
-                      child: Column(
-                        children: [
-                          if (unchanged.isEmpty)
-                            _emptyHint(
-                              'No data yet',
-                              'No stocks loaded. Pull to refresh.',
-                            ),
-                          ...unchanged.map(
-                            (s) => _StockCard(
-                              stock: s,
-                              alert: _activeAlertBySymbol[s.symbol],
-                              flashDir: _flashDir[s.symbol] ?? 0,
-                              onTrade: () => MarketActionSheet.show(context, s),
-                              onOpen: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => StockDetailScreen(stock: s),
-                                ),
-                              ),
-                            ),
+
+                    _SectionHeader(title: 'Unchanged'),
+                    const SizedBox(height: 8),
+                    if (unchanged.isEmpty)
+                      _emptyCard('No data yet', 'No stocks loaded. Pull to refresh.'),
+                    ...unchanged.map(
+                      (s) => _StockCard(
+                        stock: s,
+                        alert: _activeAlertBySymbol[s.symbol],
+                        flashDir: _flashDir[s.symbol] ?? 0,
+                        onTrade: () => MarketActionSheet.show(context, s),
+                        onOpen: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => StockDetailScreen(stock: s),
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ],
@@ -464,30 +548,17 @@ class _MarketScreenState extends State<MarketScreen> {
   }
 }
 
-class _SectionBox extends StatelessWidget {
+class _SectionHeader extends StatelessWidget {
   final String title;
-  final Widget child;
-  const _SectionBox({required this.title, required this.child});
+  const _SectionHeader({required this.title});
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 8),
-            child,
-          ],
-        ),
-      ),
+    return Text(
+      title,
+      style: Theme.of(
+        context,
+      ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
     );
   }
 }
@@ -638,3 +709,6 @@ class _StockCard extends StatelessWidget {
     );
   }
 }
+DART
+
+echo "Patched market status + placeholders."

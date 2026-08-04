@@ -54,8 +54,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
 
   // Cancel policy: allowed statuses for cancel action (default: submitted, approved).
   // If you decide to allow cancelling 'received' as well, add it here.
-  static const List<String> _cancelableStatuses = ['submitted','approved'];
-
+  static const List<String> _cancelableStatuses = ['submitted', 'approved'];
 
   @override
   void initState() {
@@ -481,7 +480,9 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                   if (idx < _orders.length) {
                     final o = _orders[idx];
                     final isRejected = o.status.toLowerCase() == 'rejected';
-                    final canCancel = _cancelableStatuses.contains(o.status.toLowerCase());
+                    final canCancel = _cancelableStatuses.contains(
+                      o.status.toLowerCase(),
+                    );
                     return Card(
                       child: ListTile(
                         onTap: () => _openSheet(o),

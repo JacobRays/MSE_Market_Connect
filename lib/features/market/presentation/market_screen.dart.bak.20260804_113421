@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:mse_market_connect/core/services/market_service.dart';
 import 'package:mse_market_connect/core/services/price_alert_service.dart';
-import 'package:mse_market_connect/core/services/market_status_service.dart';
 
 import 'package:mse_market_connect/shared/widgets/company_logo.dart';
 import 'package:mse_market_connect/features/market/presentation/market_action_sheet.dart';
@@ -26,7 +25,6 @@ class MarketScreen extends StatefulWidget {
 class _MarketScreenState extends State<MarketScreen> {
   final _marketService = MarketService();
   final _alertService = PriceAlertService();
-  final _statusService = MarketStatusService();
 
   bool _loading = true;
   String? _error;
@@ -44,11 +42,6 @@ class _MarketScreenState extends State<MarketScreen> {
   final Map<String, int> _flashDir = {};
   final Map<String, Timer> _flashTimers = {};
 
-  // Market status
-  MarketStatusData? _marketStatus;
-  bool _statusLoading = false;
-  Timer? _statusDebounce;
-
   @override
   void initState() {
     super.initState();
@@ -64,7 +57,6 @@ class _MarketScreenState extends State<MarketScreen> {
     for (final t in _flashTimers.values) {
       t.cancel();
     }
-    _statusDebounce?.cancel();
     super.dispose();
   }
 
@@ -88,7 +80,6 @@ class _MarketScreenState extends State<MarketScreen> {
       }
 
       await _loadActiveAlerts();
-      _loadStatusDebounced();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -96,26 +87,6 @@ class _MarketScreenState extends State<MarketScreen> {
         _loading = false;
       });
     }
-  }
-
-  Future<void> _loadStatus() async {
-    if (_statusLoading) return;
-    setState(() => _statusLoading = true);
-    try {
-      final st = await _statusService.getStatus(snapshot: _stocks);
-      if (!mounted) return;
-      setState(() => _marketStatus = st);
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _marketStatus = null);
-    } finally {
-      if (mounted) setState(() => _statusLoading = false);
-    }
-  }
-
-  void _loadStatusDebounced() {
-    _statusDebounce?.cancel();
-    _statusDebounce = Timer(const Duration(milliseconds: 500), _loadStatus);
   }
 
   Future<void> _loadActiveAlerts() async {
@@ -177,8 +148,6 @@ class _MarketScreenState extends State<MarketScreen> {
                 _stocks = copy;
               }
             });
-
-            _loadStatusDebounced();
           },
         )
         .subscribe();
@@ -199,66 +168,6 @@ class _MarketScreenState extends State<MarketScreen> {
     return isBuy
         ? 'Watching: BUY when price ≤ MWK ${a.targetPrice.toStringAsFixed(2)}'
         : 'Watching: SELL when price ≥ MWK ${a.targetPrice.toStringAsFixed(2)}';
-  }
-
-  Widget _statusChip() {
-    final st = _marketStatus?.status ?? 'unknown';
-    Color c;
-    String label;
-    switch (st) {
-      case 'open':
-        c = Colors.green;
-        label = 'Open';
-        break;
-      case 'closed':
-        c = Colors.redAccent;
-        label = 'Closed';
-        break;
-      case 'holiday':
-        c = Colors.orange;
-        label = 'Holiday';
-        break;
-      default:
-        c = Colors.grey;
-        label = 'Unknown';
-    }
-    final sub = _marketStatus?.message ?? (_statusLoading ? 'Checking…' : null);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(color: c, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          'Market: $label',
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-        if (sub != null) ...[
-          const SizedBox(width: 8),
-          Text(
-            sub,
-            style: const TextStyle(color: Colors.black54, fontSize: 12),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _emptyHint(String title, String line) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 6),
-          Text(line, style: const TextStyle(color: Colors.black54)),
-        ],
-      ),
-    );
   }
 
   @override
@@ -321,20 +230,6 @@ class _MarketScreenState extends State<MarketScreen> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
                 children: [
-                  // Market status row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _statusChip(),
-                      IconButton(
-                        tooltip: 'Refresh status',
-                        onPressed: _loadStatus,
-                        icon: const Icon(Icons.refresh),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
                   if (canShowToggle) ...[
                     SegmentedButton<MarketView>(
                       segments: const [
@@ -379,83 +274,59 @@ class _MarketScreenState extends State<MarketScreen> {
                       ),
                     ],
                   ] else ...[
-                    _SectionBox(
-                      title: 'Gainers',
-                      child: Column(
-                        children: [
-                          if (gainers.isEmpty)
-                            _emptyHint(
-                              'No gainers yet',
-                              'Prices haven’t moved up today.',
-                            ),
-                          ...gainers.map(
-                            (s) => _StockCard(
-                              stock: s,
-                              alert: _activeAlertBySymbol[s.symbol],
-                              flashDir: _flashDir[s.symbol] ?? 0,
-                              onTrade: () => MarketActionSheet.show(context, s),
-                              onOpen: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => StockDetailScreen(stock: s),
-                                ),
-                              ),
+                    if (gainers.isNotEmpty) ...[
+                      _SectionHeader(title: 'Gainers'),
+                      const SizedBox(height: 8),
+                      ...gainers.map(
+                        (s) => _StockCard(
+                          stock: s,
+                          alert: _activeAlertBySymbol[s.symbol],
+                          flashDir: _flashDir[s.symbol] ?? 0,
+                          onTrade: () => MarketActionSheet.show(context, s),
+                          onOpen: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => StockDetailScreen(stock: s),
                             ),
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    _SectionBox(
-                      title: 'Losers',
-                      child: Column(
-                        children: [
-                          if (losers.isEmpty)
-                            _emptyHint(
-                              'No losers yet',
-                              'Prices haven’t moved down today.',
-                            ),
-                          ...losers.map(
-                            (s) => _StockCard(
-                              stock: s,
-                              alert: _activeAlertBySymbol[s.symbol],
-                              flashDir: _flashDir[s.symbol] ?? 0,
-                              onTrade: () => MarketActionSheet.show(context, s),
-                              onOpen: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => StockDetailScreen(stock: s),
-                                ),
-                              ),
+                      const SizedBox(height: 16),
+                    ],
+                    if (losers.isNotEmpty) ...[
+                      _SectionHeader(title: 'Losers'),
+                      const SizedBox(height: 8),
+                      ...losers.map(
+                        (s) => _StockCard(
+                          stock: s,
+                          alert: _activeAlertBySymbol[s.symbol],
+                          flashDir: _flashDir[s.symbol] ?? 0,
+                          onTrade: () => MarketActionSheet.show(context, s),
+                          onOpen: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => StockDetailScreen(stock: s),
                             ),
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    _SectionBox(
-                      title: 'Unchanged',
-                      child: Column(
-                        children: [
-                          if (unchanged.isEmpty)
-                            _emptyHint(
-                              'No data yet',
-                              'No stocks loaded. Pull to refresh.',
-                            ),
-                          ...unchanged.map(
-                            (s) => _StockCard(
-                              stock: s,
-                              alert: _activeAlertBySymbol[s.symbol],
-                              flashDir: _flashDir[s.symbol] ?? 0,
-                              onTrade: () => MarketActionSheet.show(context, s),
-                              onOpen: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => StockDetailScreen(stock: s),
-                                ),
-                              ),
+                      const SizedBox(height: 16),
+                    ],
+                    if (unchanged.isNotEmpty) ...[
+                      _SectionHeader(title: 'Unchanged'),
+                      const SizedBox(height: 8),
+                      ...unchanged.map(
+                        (s) => _StockCard(
+                          stock: s,
+                          alert: _activeAlertBySymbol[s.symbol],
+                          flashDir: _flashDir[s.symbol] ?? 0,
+                          onTrade: () => MarketActionSheet.show(context, s),
+                          onOpen: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => StockDetailScreen(stock: s),
                             ),
                           ),
-                        ],
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ],
               ),
@@ -464,30 +335,17 @@ class _MarketScreenState extends State<MarketScreen> {
   }
 }
 
-class _SectionBox extends StatelessWidget {
+class _SectionHeader extends StatelessWidget {
   final String title;
-  final Widget child;
-  const _SectionBox({required this.title, required this.child});
+  const _SectionHeader({required this.title});
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 8),
-            child,
-          ],
-        ),
-      ),
+    return Text(
+      title,
+      style: Theme.of(
+        context,
+      ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
     );
   }
 }

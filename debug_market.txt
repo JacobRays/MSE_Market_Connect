@@ -1,0 +1,885 @@
+==== lib/features/market/presentation/market_screen.dart ====
+-- imports --
+1:import 'dart:async';
+2:import 'package:flutter/material.dart';
+3:import 'package:supabase_flutter/supabase_flutter.dart';
+4:import 'package:mse_market_connect/core/services/market_service.dart';
+5:import 'package:mse_market_connect/core/services/price_alert_service.dart';
+7:import 'package:mse_market_connect/shared/widgets/company_logo.dart';
+8:import 'package:mse_market_connect/features/market/presentation/market_action_sheet.dart';
+9:import 'package:mse_market_connect/features/market/presentation/my_alerts_screen.dart';
+10:import 'package:mse_market_connect/features/market/presentation/stock_detail_screen.dart';
+11:import 'package:mse_market_connect/features/notifications/presentation/notifications_screen.dart';
+12:import 'package:mse_market_connect/shared/models/price_alert_model.dart';
+13:import 'package:mse_market_connect/shared/models/stock_model.dart';
+14:import 'package:mse_market_connect/core/theme/app_theme.dart';
+-- content (with line numbers) --
+     1    import 'dart:async';
+     2    import 'package:flutter/material.dart';
+     3    import 'package:supabase_flutter/supabase_flutter.dart';
+     4    import 'package:mse_market_connect/core/services/market_service.dart';
+     5    import 'package:mse_market_connect/core/services/price_alert_service.dart';
+     6    
+     7    import 'package:mse_market_connect/shared/widgets/company_logo.dart';
+     8    import 'package:mse_market_connect/features/market/presentation/market_action_sheet.dart';
+     9    import 'package:mse_market_connect/features/market/presentation/my_alerts_screen.dart';
+    10    import 'package:mse_market_connect/features/market/presentation/stock_detail_screen.dart';
+    11    import 'package:mse_market_connect/features/notifications/presentation/notifications_screen.dart';
+    12    import 'package:mse_market_connect/shared/models/price_alert_model.dart';
+    13    import 'package:mse_market_connect/shared/models/stock_model.dart';
+    14    import 'package:mse_market_connect/core/theme/app_theme.dart';
+    15    
+    16    enum MarketView { all, watching }
+    17    
+    18    class MarketScreen extends StatefulWidget {
+    19      const MarketScreen({super.key});
+    20    
+    21      @override
+    22      State<MarketScreen> createState() => _MarketScreenState();
+    23    }
+    24    
+    25    class _MarketScreenState extends State<MarketScreen> {
+    26      final _marketService = MarketService();
+    27      final _alertService = PriceAlertService();
+    28    
+    29      bool _loading = true;
+    30      String? _error;
+    31    
+    32      List<StockModel> _stocks = [];
+    33    
+    34      MarketView _view = MarketView.all;
+    35      bool _loadingAlerts = true;
+    36      final Map<String, PriceAlertModel> _activeAlertBySymbol = {};
+    37    
+    38      RealtimeChannel? _stocksChannel;
+    39    
+    40      // live price flash
+    41      final Map<String, double> _lastPrice = {};
+    42      final Map<String, int> _flashDir = {};
+    43      final Map<String, Timer> _flashTimers = {};
+    44    
+    45      @override
+    46      void initState() {
+    47        super.initState();
+    48        _loadAll();
+    49        _listenStocksRealtime();
+    50      }
+    51    
+    52      @override
+    53      void dispose() {
+    54        if (_stocksChannel != null) {
+    55          Supabase.instance.client.removeChannel(_stocksChannel!);
+    56        }
+    57        for (final t in _flashTimers.values) {
+    58          t.cancel();
+    59        }
+    60        super.dispose();
+    61      }
+    62    
+    63      Future<void> _loadAll() async {
+    64        setState(() {
+    65          _loading = true;
+    66          _error = null;
+    67        });
+    68    
+    69        try {
+    70          final stocks = await _marketService.getStocks();
+    71          if (!mounted) return;
+    72    
+    73          setState(() {
+    74            _stocks = stocks;
+    75            _loading = false;
+    76          });
+    77    
+    78          for (final s in stocks) {
+    79            _lastPrice[s.symbol] = s.price;
+    80          }
+    81    
+    82          await _loadActiveAlerts();
+    83        } catch (e) {
+    84          if (!mounted) return;
+    85          setState(() {
+    86            _error = e.toString();
+    87            _loading = false;
+    88          });
+    89        }
+    90      }
+    91    
+    92      Future<void> _loadActiveAlerts() async {
+    93        setState(() => _loadingAlerts = true);
+    94        try {
+    95          final alerts = await _alertService.getMyAlerts(activeOnly: true);
+    96          if (!mounted) return;
+    97    
+    98          _activeAlertBySymbol
+    99            ..clear()
+   100            ..addEntries(alerts.map((a) => MapEntry(a.stockSymbol, a)));
+   101    
+   102          setState(() => _loadingAlerts = false);
+   103        } catch (_) {
+   104          if (!mounted) return;
+   105          setState(() => _loadingAlerts = false);
+   106        }
+   107      }
+   108    
+   109      Future<void> _refresh() async {
+   110        await _loadAll();
+   111        if (!mounted) return;
+   112        ScaffoldMessenger.of(
+   113          context,
+   114        ).showSnackBar(const SnackBar(content: Text('Market refreshed')));
+   115      }
+   116    
+   117      void _listenStocksRealtime() {
+   118        _stocksChannel = Supabase.instance.client
+   119            .channel('stocks-live')
+   120            .onPostgresChanges(
+   121              event: PostgresChangeEvent.all,
+   122              schema: 'public',
+   123              table: 'stocks',
+   124              callback: (payload) {
+   125                final rec = payload.newRecord;
+   126                if (rec.isEmpty) return;
+   127                if (rec['is_active'] == false) return;
+   128    
+   129                final updated = StockModel.fromMap(rec);
+   130    
+   131                final prev = _lastPrice[updated.symbol];
+   132                if (prev != null) {
+   133                  final dir = updated.price > prev
+   134                      ? 1
+   135                      : (updated.price < prev ? -1 : 0);
+   136                  if (dir != 0) _triggerFlash(updated.symbol, dir);
+   137                }
+   138                _lastPrice[updated.symbol] = updated.price;
+   139    
+   140                final idx = _stocks.indexWhere((s) => s.symbol == updated.symbol);
+   141                setState(() {
+   142                  if (idx == -1) {
+   143                    _stocks = [..._stocks, updated]
+   144                      ..sort((a, b) => a.symbol.compareTo(b.symbol));
+   145                  } else {
+   146                    final copy = [..._stocks];
+   147                    copy[idx] = updated;
+   148                    _stocks = copy;
+   149                  }
+   150                });
+   151              },
+   152            )
+   153            .subscribe();
+   154      }
+   155    
+   156      void _triggerFlash(String symbol, int dir) {
+   157        _flashTimers[symbol]?.cancel();
+   158        setState(() => _flashDir[symbol] = dir);
+   159    
+   160        _flashTimers[symbol] = Timer(const Duration(milliseconds: 900), () {
+   161          if (!mounted) return;
+   162          setState(() => _flashDir.remove(symbol));
+   163        });
+   164      }
+   165    
+   166      String _watchLine(PriceAlertModel a) {
+   167        final isBuy = a.alertType == 'buy';
+   168        return isBuy
+   169            ? 'Watching: BUY when price ≤ MWK ${a.targetPrice.toStringAsFixed(2)}'
+   170            : 'Watching: SELL when price ≥ MWK ${a.targetPrice.toStringAsFixed(2)}';
+   171      }
+   172    
+   173      @override
+   174      Widget build(BuildContext context) {
+   175        final canShowToggle = !_loadingAlerts;
+   176    
+   177        final watching = _stocks
+   178            .where((s) => _activeAlertBySymbol.containsKey(s.symbol))
+   179            .toList();
+   180        final gainers = _stocks.where((s) => s.changePercent > 0).toList()
+   181          ..sort((a, b) => b.changePercent.compareTo(a.changePercent));
+   182        final losers = _stocks.where((s) => s.changePercent < 0).toList()
+   183          ..sort((a, b) => a.changePercent.compareTo(b.changePercent));
+   184        final unchanged = _stocks.where((s) => s.changePercent == 0).toList()
+   185          ..sort((a, b) => a.symbol.compareTo(b.symbol));
+   186    
+   187        return Scaffold(
+   188          appBar: AppBar(
+   189            title: const Text('Market'),
+   190            actions: [
+   191              IconButton(
+   192                tooltip: 'Notifications',
+   193                onPressed: () => Navigator.of(context).push(
+   194                  MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+   195                ),
+   196                icon: const Icon(Icons.notifications_outlined),
+   197              ),
+   198              IconButton(
+   199                tooltip: 'Watch (Targets)',
+   200                onPressed: () => Navigator.of(
+   201                  context,
+   202                ).push(MaterialPageRoute(builder: (_) => const MyAlertsScreen())),
+   203                icon: const Icon(Icons.track_changes_outlined),
+   204              ),
+   205            ],
+   206          ),
+   207          body: RefreshIndicator(
+   208            onRefresh: _refresh,
+   209            child: _loading
+   210                ? const Center(child: CircularProgressIndicator())
+   211                : (_error != null)
+   212                ? ListView(
+   213                    physics: const AlwaysScrollableScrollPhysics(),
+   214                    padding: const EdgeInsets.all(16),
+   215                    children: [
+   216                      const SizedBox(height: 40),
+   217                      Icon(
+   218                        Icons.error_outline,
+   219                        color: AppTheme.lossColor,
+   220                        size: 64,
+   221                      ),
+   222                      const SizedBox(height: 12),
+   223                      Text(
+   224                        'Failed to load market data.\n$_error',
+   225                        textAlign: TextAlign.center,
+   226                      ),
+   227                    ],
+   228                  )
+   229                : ListView(
+   230                    physics: const AlwaysScrollableScrollPhysics(),
+   231                    padding: const EdgeInsets.all(16),
+   232                    children: [
+   233                      if (canShowToggle) ...[
+   234                        SegmentedButton<MarketView>(
+   235                          segments: const [
+   236                            ButtonSegment(
+   237                              value: MarketView.all,
+   238                              label: Text('All'),
+   239                            ),
+   240                            ButtonSegment(
+   241                              value: MarketView.watching,
+   242                              label: Text('Watching'),
+   243                            ),
+   244                          ],
+   245                          selected: {_view},
+   246                          onSelectionChanged: (set) =>
+   247                              setState(() => _view = set.first),
+   248                        ),
+   249                        const SizedBox(height: 16),
+   250                      ],
+   251    
+   252                      if (_view == MarketView.watching) ...[
+   253                        if (watching.isEmpty) ...[
+   254                          const SizedBox(height: 60),
+   255                          const Icon(Icons.star, size: 64),
+   256                          const SizedBox(height: 12),
+   257                          const Text(
+   258                            'You are not watching any companies yet.\nCreate a price target in Trade → Alert.',
+   259                            textAlign: TextAlign.center,
+   260                          ),
+   261                        ] else ...[
+   262                          ...watching.map(
+   263                            (s) => _StockCard(
+   264                              stock: s,
+   265                              alert: _activeAlertBySymbol[s.symbol],
+   266                              flashDir: _flashDir[s.symbol] ?? 0,
+   267                              onTrade: () => MarketActionSheet.show(context, s),
+   268                              onOpen: () => Navigator.of(context).push(
+   269                                MaterialPageRoute(
+   270                                  builder: (_) => StockDetailScreen(stock: s),
+   271                                ),
+   272                              ),
+   273                            ),
+   274                          ),
+   275                        ],
+   276                      ] else ...[
+   277                        if (gainers.isNotEmpty) ...[
+   278                          _SectionHeader(title: 'Gainers'),
+   279                          const SizedBox(height: 8),
+   280                          ...gainers.map(
+   281                            (s) => _StockCard(
+   282                              stock: s,
+   283                              alert: _activeAlertBySymbol[s.symbol],
+   284                              flashDir: _flashDir[s.symbol] ?? 0,
+   285                              onTrade: () => MarketActionSheet.show(context, s),
+   286                              onOpen: () => Navigator.of(context).push(
+   287                                MaterialPageRoute(
+   288                                  builder: (_) => StockDetailScreen(stock: s),
+   289                                ),
+   290                              ),
+   291                            ),
+   292                          ),
+   293                          const SizedBox(height: 16),
+   294                        ],
+   295                        if (losers.isNotEmpty) ...[
+   296                          _SectionHeader(title: 'Losers'),
+   297                          const SizedBox(height: 8),
+   298                          ...losers.map(
+   299                            (s) => _StockCard(
+   300                              stock: s,
+   301                              alert: _activeAlertBySymbol[s.symbol],
+   302                              flashDir: _flashDir[s.symbol] ?? 0,
+   303                              onTrade: () => MarketActionSheet.show(context, s),
+   304                              onOpen: () => Navigator.of(context).push(
+   305                                MaterialPageRoute(
+   306                                  builder: (_) => StockDetailScreen(stock: s),
+   307                                ),
+   308                              ),
+   309                            ),
+   310                          ),
+   311                          const SizedBox(height: 16),
+   312                        ],
+   313                        if (unchanged.isNotEmpty) ...[
+   314                          _SectionHeader(title: 'Unchanged'),
+   315                          const SizedBox(height: 8),
+   316                          ...unchanged.map(
+   317                            (s) => _StockCard(
+   318                              stock: s,
+   319                              alert: _activeAlertBySymbol[s.symbol],
+   320                              flashDir: _flashDir[s.symbol] ?? 0,
+   321                              onTrade: () => MarketActionSheet.show(context, s),
+   322                              onOpen: () => Navigator.of(context).push(
+   323                                MaterialPageRoute(
+   324                                  builder: (_) => StockDetailScreen(stock: s),
+   325                                ),
+   326                              ),
+   327                            ),
+   328                          ),
+   329                        ],
+   330                      ],
+   331                    ],
+   332                  ),
+   333          ),
+   334        );
+   335      }
+   336    }
+   337    
+   338    class _SectionHeader extends StatelessWidget {
+   339      final String title;
+   340      const _SectionHeader({required this.title});
+   341    
+   342      @override
+   343      Widget build(BuildContext context) {
+   344        return Text(
+   345          title,
+   346          style: Theme.of(
+   347            context,
+   348          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+   349        );
+   350      }
+   351    }
+   352    
+   353    class _StockCard extends StatelessWidget {
+   354      final StockModel stock;
+   355      final PriceAlertModel? alert;
+   356      final int flashDir; // 1 up, -1 down
+   357      final VoidCallback onTrade;
+   358      final VoidCallback onOpen;
+   359    
+   360      const _StockCard({
+   361        required this.stock,
+   362        required this.alert,
+   363        required this.flashDir,
+   364        required this.onTrade,
+   365        required this.onOpen,
+   366      });
+   367    
+   368      String _watchLine(PriceAlertModel a) {
+   369        final isBuy = a.alertType == 'buy';
+   370        return isBuy
+   371            ? 'Watching: BUY when price ≤ MWK ${a.targetPrice.toStringAsFixed(2)}'
+   372            : 'Watching: SELL when price ≥ MWK ${a.targetPrice.toStringAsFixed(2)}';
+   373      }
+   374    
+   375      @override
+   376      Widget build(BuildContext context) {
+   377        final isPositive = stock.changePercent >= 0;
+   378        final flashColor = flashDir == 1
+   379            ? AppTheme.gainColor.withValues(alpha: 0.10)
+   380            : flashDir == -1
+   381            ? AppTheme.lossColor.withValues(alpha: 0.10)
+   382            : Colors.transparent;
+   383    
+   384        return Padding(
+   385          padding: const EdgeInsets.only(bottom: 12),
+   386          child: Card(
+   387            clipBehavior: Clip.antiAlias,
+   388            child: InkWell(
+   389              onTap: onOpen,
+   390              child: Padding(
+   391                padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+   392                child: Row(
+   393                  children: [
+   394                    CompanyLogo(
+   395                      symbol: stock.symbol,
+   396                      logoUrl: stock.logoUrl,
+   397                      size: 44,
+   398                    ),
+   399                    const SizedBox(width: 12),
+   400                    Expanded(
+   401                      child: Column(
+   402                        crossAxisAlignment: CrossAxisAlignment.start,
+   403                        children: [
+   404                          Text(
+   405                            stock.symbol,
+   406                            style: const TextStyle(fontWeight: FontWeight.w900),
+   407                          ),
+   408                          const SizedBox(height: 4),
+   409                          Text(
+   410                            stock.companyName,
+   411                            maxLines: 1,
+   412                            overflow: TextOverflow.ellipsis,
+   413                          ),
+   414                          if (alert != null) ...[
+   415                            const SizedBox(height: 6),
+   416                            Text(
+   417                              _watchLine(alert!),
+   418                              style: const TextStyle(
+   419                                fontWeight: FontWeight.w700,
+   420                                fontSize: 12.5,
+   421                              ),
+   422                            ),
+   423                          ],
+   424                        ],
+   425                      ),
+   426                    ),
+   427                    const SizedBox(width: 10),
+   428                    Column(
+   429                      crossAxisAlignment: CrossAxisAlignment.end,
+   430                      children: [
+   431                        AnimatedContainer(
+   432                          duration: const Duration(milliseconds: 250),
+   433                          padding: const EdgeInsets.symmetric(
+   434                            horizontal: 10,
+   435                            vertical: 6,
+   436                          ),
+   437                          decoration: BoxDecoration(
+   438                            color: flashColor,
+   439                            borderRadius: BorderRadius.circular(10),
+   440                          ),
+   441                          child: Column(
+   442                            crossAxisAlignment: CrossAxisAlignment.end,
+   443                            children: [
+   444                              Text(
+   445                                'MWK ${stock.price.toStringAsFixed(2)}',
+   446                                style: const TextStyle(fontWeight: FontWeight.w900),
+   447                              ),
+   448                              const SizedBox(height: 2),
+   449                              Row(
+   450                                mainAxisSize: MainAxisSize.min,
+   451                                children: [
+   452                                  Icon(
+   453                                    isPositive
+   454                                        ? Icons.arrow_upward
+   455                                        : Icons.arrow_downward,
+   456                                    size: 13,
+   457                                    color: isPositive
+   458                                        ? AppTheme.gainColor
+   459                                        : AppTheme.lossColor,
+   460                                  ),
+   461                                  const SizedBox(width: 2),
+   462                                  Text(
+   463                                    '${isPositive ? '+' : ''}${stock.changePercent.toStringAsFixed(2)}%',
+   464                                    style: TextStyle(
+   465                                      color: isPositive
+   466                                          ? AppTheme.gainColor
+   467                                          : AppTheme.lossColor,
+   468                                      fontWeight: FontWeight.w800,
+   469                                      fontSize: 12,
+   470                                    ),
+   471                                  ),
+   472                                ],
+   473                              ),
+   474                            ],
+   475                          ),
+   476                        ),
+   477                        const SizedBox(height: 8),
+   478                        SizedBox(
+   479                          height: 32,
+   480                          child: OutlinedButton(
+   481                            onPressed: onTrade,
+   482                            style: OutlinedButton.styleFrom(
+   483                              visualDensity: VisualDensity.compact,
+   484                              padding: const EdgeInsets.symmetric(horizontal: 12),
+   485                            ),
+   486                            child: const Text('Trade'),
+   487                          ),
+   488                        ),
+   489                      ],
+   490                    ),
+   491                  ],
+   492                ),
+   493              ),
+   494            ),
+   495          ),
+   496        );
+   497      }
+   498    }
+
+==== lib/core/services/market_service.dart ====
+-- imports --
+1:import 'package:supabase_flutter/supabase_flutter.dart';
+2:import 'package:mse_market_connect/shared/models/stock_model.dart';
+-- content (with line numbers) --
+     1    import 'package:supabase_flutter/supabase_flutter.dart';
+     2    import 'package:mse_market_connect/shared/models/stock_model.dart';
+     3    
+     4    class MarketService {
+     5      final SupabaseClient _client = Supabase.instance.client;
+     6    
+     7      Future<List<StockModel>> getStocks() async {
+     8        final response = await _client
+     9            .from('stocks')
+    10            .select()
+    11            .eq('is_active', true)
+    12            .order('symbol', ascending: true);
+    13    
+    14        return (response as List)
+    15            .map((item) => StockModel.fromMap(item as Map<String, dynamic>))
+    16            .toList();
+    17      }
+    18    }
+
+==== lib/shared/models/stock_model.dart ====
+-- imports --
+-- content (with line numbers) --
+     1    class StockModel {
+     2      final int id;
+     3      final String symbol;
+     4      final String companyName;
+     5      final double price;
+     6      final double changePercent;
+     7      final int volume;
+     8      final bool isActive;
+     9      final DateTime? updatedAt;
+    10    
+    11      final String? logoUrl;
+    12    
+    13      const StockModel({
+    14        required this.id,
+    15        required this.symbol,
+    16        required this.companyName,
+    17        required this.price,
+    18        required this.changePercent,
+    19        required this.volume,
+    20        required this.isActive,
+    21        this.updatedAt,
+    22        this.logoUrl,
+    23      });
+    24    
+    25      factory StockModel.fromMap(Map<String, dynamic> map) {
+    26        return StockModel(
+    27          id: (map['id'] as num).toInt(),
+    28          symbol: (map['symbol'] ?? '').toString(),
+    29          companyName: (map['company_name'] ?? '').toString(),
+    30          price: (map['price'] as num?)?.toDouble() ?? 0.0,
+    31          changePercent: (map['change_percent'] as num?)?.toDouble() ?? 0.0,
+    32          volume: (map['volume'] as num?)?.toInt() ?? 0,
+    33          isActive: map['is_active'] as bool? ?? true,
+    34          updatedAt: map['updated_at'] != null
+    35              ? DateTime.tryParse(map['updated_at'].toString())
+    36              : null,
+    37          logoUrl: map['logo_url'] as String?,
+    38        );
+    39      }
+    40    }
+
+==== lib/core/services/mse_price_sync_service.dart ====
+-- imports --
+1:import 'dart:async';
+2:import 'package:flutter/foundation.dart';
+3:import 'package:html/parser.dart' as html_parser;
+4:import 'package:http/http.dart' as http;
+5:import 'package:supabase_flutter/supabase_flutter.dart';
+-- content (with line numbers) --
+     1    import 'dart:async';
+     2    import 'package:flutter/foundation.dart';
+     3    import 'package:html/parser.dart' as html_parser;
+     4    import 'package:http/http.dart' as http;
+     5    import 'package:supabase_flutter/supabase_flutter.dart';
+     6    
+     7    class MsePriceSyncService {
+     8      final SupabaseClient _db = Supabase.instance.client;
+     9    
+    10      double _num(String s) {
+    11        final m = RegExp(r'-?\d+(\.\d+)?').firstMatch(s.replaceAll(',', ''));
+    12        if (m == null) return 0.0;
+    13        return double.tryParse(m.group(0)!) ?? 0.0;
+    14      }
+    15    
+    16      int _int(String s) {
+    17        final m = RegExp(r'\d+').firstMatch(s.replaceAll(',', ''));
+    18        if (m == null) return 0;
+    19        return int.tryParse(m.group(0)!) ?? 0;
+    20      }
+    21    
+    22      double _computeChangePct({required double open, required double close}) {
+    23        if (open <= 0) return 0.0;
+    24        return ((close - open) / open) * 100.0;
+    25      }
+    26    
+    27      Future<void> _insertHistory(
+    28        List<Map<String, dynamic>> updates,
+    29        String recordedAt,
+    30      ) async {
+    31        try {
+    32          final historyRows = updates.map((u) {
+    33            return <String, dynamic>{
+    34              'symbol': u['symbol'],
+    35              'price': u['price'],
+    36              'change_percent': u['change_percent'],
+    37              'volume': u['volume'],
+    38              'recorded_at': recordedAt,
+    39            };
+    40          }).toList();
+    41    
+    42          await _db.from('stock_price_history').insert(historyRows);
+    43          debugPrint('Inserted ${historyRows.length} history rows');
+    44        } catch (e, st) {
+    45          // Best-effort: do not fail the sync if history insert fails
+    46          debugPrint('History insert skipped/failed: $e');
+    47          debugPrint('$st');
+    48        }
+    49      }
+    50    
+    51      Future<int> syncMainboardPrices() async {
+    52        if (kIsWeb) {
+    53          throw UnsupportedError(
+    54            'Price sync is only supported on the mobile build (Android/iOS).',
+    55          );
+    56        }
+    57    
+    58        final existing = await _db.from('stocks').select('symbol');
+    59        final existingSymbols = (existing as List)
+    60            .map((r) => (r['symbol'] ?? '').toString().toUpperCase().trim())
+    61            .where((s) => s.isNotEmpty)
+    62            .toSet();
+    63    
+    64        final uri = Uri.parse('https://mse.co.mw/market/mainboard');
+    65        final resp = await http
+    66            .get(
+    67              uri,
+    68              headers: const {
+    69                'User-Agent':
+    70                    'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36',
+    71                'Accept': 'text/html',
+    72              },
+    73            )
+    74            .timeout(const Duration(seconds: 30));
+    75    
+    76        if (resp.statusCode != 200) {
+    77          throw 'MSE returned HTTP ${resp.statusCode}';
+    78        }
+    79    
+    80        final doc = html_parser.parse(resp.body);
+    81        final tables = doc.querySelectorAll('table');
+    82        if (tables.isEmpty) throw 'No table found on MSE page';
+    83    
+    84        dynamic table;
+    85        for (final t in tables) {
+    86          final thText = t
+    87              .querySelectorAll('th')
+    88              .map((e) => e.text.toLowerCase())
+    89              .join(' ');
+    90          if (thText.contains('symbol') &&
+    91              thText.contains('open') &&
+    92              thText.contains('close')) {
+    93            table = t;
+    94            break;
+    95          }
+    96        }
+    97        table ??= tables.first;
+    98    
+    99        final rows = table.querySelectorAll('tr');
+   100        if (rows.length < 2) throw 'No data rows found in MSE table';
+   101    
+   102        final now = DateTime.now().toUtc().toIso8601String();
+   103        final updates = <Map<String, dynamic>>[];
+   104    
+   105        for (final tr in rows.skip(1)) {
+   106          final cols = tr.querySelectorAll('td');
+   107          if (cols.length < 5) continue;
+   108    
+   109          final symbol = cols[0].text.trim().toUpperCase();
+   110          if (symbol.isEmpty) continue;
+   111          if (!existingSymbols.contains(symbol)) continue;
+   112    
+   113          final openPrice = _num(cols[1].text);
+   114          final closePrice = _num(cols[2].text);
+   115    
+   116          // MSE column sometimes comes as 0 even when open/close differ.
+   117          final parsedChange = _num(cols[3].text);
+   118          final computedChange = _computeChangePct(
+   119            open: openPrice,
+   120            close: closePrice,
+   121          );
+   122    
+   123          // Use computed if parsed is essentially zero but open/close indicate movement.
+   124          final changePercent =
+   125              (parsedChange.abs() < 0.000001 && computedChange.abs() > 0.000001)
+   126              ? computedChange
+   127              : parsedChange;
+   128    
+   129          final volume = _int(cols[4].text);
+   130          final turnover = cols.length >= 6 ? _num(cols[5].text) : 0.0;
+   131    
+   132          updates.add({
+   133            'symbol': symbol,
+   134            'open_price': openPrice,
+   135            'price': closePrice,
+   136            'change_percent': changePercent,
+   137            'volume': volume,
+   138            'turnover_mwk': turnover,
+   139            'updated_at': now,
+   140          });
+   141        }
+   142    
+   143        if (updates.isEmpty) {
+   144          throw 'No matching symbols updated. (DB symbols may not match MSE page symbols)';
+   145        }
+   146    
+   147        await _db.from('stocks').upsert(updates, onConflict: 'symbol');
+   148        await _insertHistory(updates, now);
+   149    
+   150        return updates.length;
+   151      }
+   152    }
+
+==== lib/core/services/mse_sync_service.dart ====
+-- imports --
+1:import 'package:http/http.dart' as http;
+2:import 'package:html/parser.dart' as parser;
+3:import 'package:supabase_flutter/supabase_flutter.dart';
+4:import 'package:flutter/foundation.dart';
+-- content (with line numbers) --
+     1    import 'package:http/http.dart' as http;
+     2    import 'package:html/parser.dart' as parser;
+     3    import 'package:supabase_flutter/supabase_flutter.dart';
+     4    import 'package:flutter/foundation.dart';
+     5    
+     6    class MseSyncService {
+     7      final _db = Supabase.instance.client;
+     8    
+     9      // Helper for fetching HTML (Direct on Mobile, Proxy on Web)
+    10      Future<String> _fetchHtml(String rawUrl) async {
+    11        final url = kIsWeb
+    12            ? Uri.parse('https://corsproxy.io/?${Uri.encodeComponent(rawUrl)}')
+    13            : Uri.parse(rawUrl);
+    14    
+    15        final response = await http.get(url).timeout(const Duration(seconds: 30));
+    16        if (response.statusCode != 200) throw 'Error ${response.statusCode}';
+    17        return response.body;
+    18      }
+    19    
+    20      // 1. SYNC PRICES (From MSE - Best triggered manually by Admin)
+    21      Future<int> syncPrices() async {
+    22        final htmlBody = await _fetchHtml('https://mse.co.mw/market/mainboard');
+    23        final document = parser.parse(htmlBody);
+    24        final table = document.querySelector('table');
+    25        if (table == null) throw 'MSE Stock table not found';
+    26    
+    27        List<Map<String, dynamic>> stocks = [];
+    28        final rows = table.querySelectorAll('tr');
+    29    
+    30        for (var i = 1; i < rows.length; i++) {
+    31          final cols = rows[i].querySelectorAll('td');
+    32          if (cols.length < 5) continue;
+    33    
+    34          stocks.add({
+    35            'symbol': cols[0].text.trim().toUpperCase(),
+    36            'price':
+    37                double.tryParse(cols[2].text.replaceAll(',', '').trim()) ?? 0.0,
+    38            'change_percent':
+    39                double.tryParse(cols[3].text.replaceAll('%', '').trim()) ?? 0.0,
+    40            'volume': int.tryParse(cols[4].text.replaceAll(',', '').trim()) ?? 0,
+    41            'updated_at': DateTime.now().toUtc().toIso8601String(),
+    42          });
+    43        }
+    44    
+    45        if (stocks.isNotEmpty) {
+    46          await _db.from('stocks').upsert(stocks, onConflict: 'symbol');
+    47        }
+    48        return stocks.length;
+    49      }
+    50    
+    51      // 2. SYNC NEWS (From Nyasa Times Business - High Success Rate)
+    52      Future<int> syncNews() async {
+    53        final htmlBody = await _fetchHtml(
+    54          'https://www.nyasatimes.com/category/business/',
+    55        );
+    56        final document = parser.parse(htmlBody);
+    57    
+    58        List<Map<String, dynamic>> newsItems = [];
+    59        // Nyasa Times uses 'card-title' or 'h3' for news headers
+    60        final articles = document.querySelectorAll('h3.entry-title a');
+    61    
+    62        for (var a in articles) {
+    63          final title = a.text.trim();
+    64          final link = a.attributes['href'] ?? '';
+    65    
+    66          if (title.length > 10 && link.isNotEmpty) {
+    67            newsItems.add({
+    68              'title': title,
+    69              'excerpt': 'Malawi Business News Update',
+    70              'category': 'Business',
+    71              'published_at': DateTime.now().toUtc().toIso8601String(),
+    72              'source_url': link,
+    73            });
+    74          }
+    75        }
+    76    
+    77        if (newsItems.isNotEmpty) {
+    78          await _db.from('news').upsert(newsItems, onConflict: 'source_url');
+    79        }
+    80        return newsItems.length;
+    81      }
+    82    }
+
+==== grep: change_percent / changePercent ====
+lib/core/services/mse_sync_service.dart:38:        'change_percent':
+lib/core/services/price_alert_service.dart:30:        .select('symbol, company_name, price, change_percent')
+lib/core/services/portfolio_service.dart:14:          'stock_symbol, shares, avg_cost, stocks(price, company_name, change_percent, logo_url)',
+lib/core/services/portfolio_service.dart:27:        changePercent: (stock?['change_percent'] as num?)?.toDouble() ?? 0.0,
+lib/core/services/mse_price_sync_service.dart:36:          'change_percent': u['change_percent'],
+lib/core/services/mse_price_sync_service.dart:124:      final changePercent =
+lib/core/services/mse_price_sync_service.dart:136:        'change_percent': changePercent,
+lib/shared/models/holding_model.dart:10:  final double changePercent;
+lib/shared/models/holding_model.dart:19:    required this.changePercent,
+lib/shared/models/holding_model.dart:28:  HoldingModel copyWith({double? currentPrice, double? changePercent}) {
+lib/shared/models/holding_model.dart:36:      changePercent: changePercent ?? this.changePercent,
+lib/shared/models/stock_model.dart:6:  final double changePercent;
+lib/shared/models/stock_model.dart:18:    required this.changePercent,
+lib/shared/models/stock_model.dart:31:      changePercent: (map['change_percent'] as num?)?.toDouble() ?? 0.0,
+lib/shared/models/price_alert_model.dart:14:  final double? changePercent;
+lib/shared/models/price_alert_model.dart:27:    this.changePercent,
+lib/shared/models/price_alert_model.dart:47:      changePercent: (stockMap?['change_percent'] as num?)?.toDouble(),
+lib/features/portfolio/presentation/portfolio_screen.dart.bak.20260803_095432:90:            final chg = (rec['change_percent'] as num?)?.toDouble();
+lib/features/portfolio/presentation/portfolio_screen.dart.bak.20260803_095432:95:                changePercent: chg ?? _holdings[idx].changePercent,
+lib/features/portfolio/presentation/portfolio_screen.dart.bak.20260803_095432:212:                final isUp = h.changePercent >= 0;
+lib/features/portfolio/presentation/portfolio_screen.dart.bak.20260803_095432:283:                                  '${isUp ? '+' : ''}${h.changePercent.toStringAsFixed(2)}%',
+lib/features/portfolio/presentation/portfolio_screen.dart:91:            final chg = (rec['change_percent'] as num?)?.toDouble();
+lib/features/portfolio/presentation/portfolio_screen.dart:96:                changePercent: chg ?? _holdings[idx].changePercent,
+lib/features/portfolio/presentation/portfolio_screen.dart:213:                final isUp = h.changePercent >= 0;
+lib/features/portfolio/presentation/portfolio_screen.dart:284:                                  '${isUp ? '+' : ''}${h.changePercent.toStringAsFixed(2)}%',
+lib/features/home/presentation/home_screen.dart:264:          .select('symbol, price, change_percent')
+lib/features/home/presentation/home_screen.dart:277:        final chg = (r['change_percent'] as num?)?.toDouble() ?? 0.0;
+lib/features/market/presentation/my_alerts_screen.dart:174:                final change = a.changePercent;
+lib/features/market/presentation/stock_detail_screen.dart:78:          'id, symbol, company_name, price, change_percent, volume, is_active, updated_at, logo_url',
+lib/features/market/presentation/stock_detail_screen.dart:115:    final isPositive = _stock.changePercent >= 0;
+lib/features/market/presentation/stock_detail_screen.dart:159:                                  '${isPositive ? '+' : ''}${_stock.changePercent.toStringAsFixed(2)}%',
+lib/features/market/presentation/market_action_sheet.dart:263:                          '${stock.changePercent >= 0 ? '+' : ''}${stock.changePercent.toStringAsFixed(2)}%',
+lib/features/market/presentation/market_screen.dart:180:    final gainers = _stocks.where((s) => s.changePercent > 0).toList()
+lib/features/market/presentation/market_screen.dart:181:      ..sort((a, b) => b.changePercent.compareTo(a.changePercent));
+lib/features/market/presentation/market_screen.dart:182:    final losers = _stocks.where((s) => s.changePercent < 0).toList()
+lib/features/market/presentation/market_screen.dart:183:      ..sort((a, b) => a.changePercent.compareTo(b.changePercent));
+lib/features/market/presentation/market_screen.dart:184:    final unchanged = _stocks.where((s) => s.changePercent == 0).toList()
+lib/features/market/presentation/market_screen.dart:377:    final isPositive = stock.changePercent >= 0;
+lib/features/market/presentation/market_screen.dart:463:                                '${isPositive ? '+' : ''}${stock.changePercent.toStringAsFixed(2)}%',
+lib/features/market/presentation/market_screen.dart.bak.20260803_100943:179:    final gainers = _stocks.where((s) => s.changePercent > 0).toList()
+lib/features/market/presentation/market_screen.dart.bak.20260803_100943:180:      ..sort((a, b) => b.changePercent.compareTo(a.changePercent));
+lib/features/market/presentation/market_screen.dart.bak.20260803_100943:181:    final losers = _stocks.where((s) => s.changePercent < 0).toList()
+lib/features/market/presentation/market_screen.dart.bak.20260803_100943:182:      ..sort((a, b) => a.changePercent.compareTo(b.changePercent));
+lib/features/market/presentation/market_screen.dart.bak.20260803_100943:183:    final unchanged = _stocks.where((s) => s.changePercent == 0).toList()
+lib/features/market/presentation/market_screen.dart.bak.20260803_100943:376:    final isPositive = stock.changePercent >= 0;
+lib/features/market/presentation/market_screen.dart.bak.20260803_100943:462:                                '${isPositive ? '+' : ''}${stock.changePercent.toStringAsFixed(2)}%',
+
+==== grep: SELECT lines in market_service ====
+10:        .select()
+

@@ -7,9 +7,7 @@ class MarketService {
   Future<List<StockModel>> getStocks() async {
     final response = await _client
         .from('stocks')
-        .select(
-          'id, symbol, company_name, price, change_percent, volume, is_active, updated_at, logo_url, open_price',
-        )
+        .select()
         .eq('is_active', true)
         .order('symbol', ascending: true);
 

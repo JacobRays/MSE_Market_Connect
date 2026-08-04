@@ -1,3 +1,14 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+F="lib/features/market/presentation/market_screen.dart"
+[[ -f "$F" ]] || { echo "Missing: $F" >&2; exit 1; }
+
+ts="$(date +%Y%m%d_%H%M%S)"
+cp -a "$F" "${F}.bak.${ts}"
+echo "Backup: ${F}.bak.${ts}"
+
+cat > "$F" << 'DART'
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -226,23 +237,13 @@ class _MarketScreenState extends State<MarketScreen> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(color: c, shape: BoxShape.circle),
-        ),
+        Container(width: 10, height: 10, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
         const SizedBox(width: 6),
-        Text(
-          'Market: $label',
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
+        Text('Market: $label', style: const TextStyle(fontWeight: FontWeight.w700)),
         if (sub != null) ...[
           const SizedBox(width: 8),
-          Text(
-            sub,
-            style: const TextStyle(color: Colors.black54, fontSize: 12),
-          ),
-        ],
+          Text(sub, style: const TextStyle(color: Colors.black54, fontSize: 12)),
+        ]
       ],
     );
   }
@@ -384,10 +385,7 @@ class _MarketScreenState extends State<MarketScreen> {
                       child: Column(
                         children: [
                           if (gainers.isEmpty)
-                            _emptyHint(
-                              'No gainers yet',
-                              'Prices haven’t moved up today.',
-                            ),
+                            _emptyHint('No gainers yet', 'Prices haven’t moved up today.'),
                           ...gainers.map(
                             (s) => _StockCard(
                               stock: s,
@@ -410,10 +408,7 @@ class _MarketScreenState extends State<MarketScreen> {
                       child: Column(
                         children: [
                           if (losers.isEmpty)
-                            _emptyHint(
-                              'No losers yet',
-                              'Prices haven’t moved down today.',
-                            ),
+                            _emptyHint('No losers yet', 'Prices haven’t moved down today.'),
                           ...losers.map(
                             (s) => _StockCard(
                               stock: s,
@@ -436,10 +431,7 @@ class _MarketScreenState extends State<MarketScreen> {
                       child: Column(
                         children: [
                           if (unchanged.isEmpty)
-                            _emptyHint(
-                              'No data yet',
-                              'No stocks loaded. Pull to refresh.',
-                            ),
+                            _emptyHint('No data yet', 'No stocks loaded. Pull to refresh.'),
                           ...unchanged.map(
                             (s) => _StockCard(
                               stock: s,
@@ -477,12 +469,11 @@ class _SectionBox extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
-            ),
+            Text(title,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w900)),
             const SizedBox(height: 8),
             child,
           ],
@@ -520,8 +511,8 @@ class _StockCard extends StatelessWidget {
     final flashColor = flashDir == 1
         ? AppTheme.gainColor.withValues(alpha: 0.10)
         : flashDir == -1
-        ? AppTheme.lossColor.withValues(alpha: 0.10)
-        : Colors.transparent;
+            ? AppTheme.lossColor.withValues(alpha: 0.10)
+            : Colors.transparent;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -638,3 +629,6 @@ class _StockCard extends StatelessWidget {
     );
   }
 }
+DART
+
+echo "Patched MarketScreen with containerized Gainers/Losers and status chip preserved."
