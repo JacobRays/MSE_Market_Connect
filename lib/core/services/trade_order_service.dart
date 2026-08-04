@@ -6,10 +6,11 @@ import 'package:mse_market_connect/shared/models/trade_order_model.dart';
 class TradeOrderService {
   final SupabaseClient _client = Supabase.instance.client;
 
+  // Create order
   Future<String> createMarketRequestOrder({
     required StockModel stock,
     required BrokerModel broker,
-    required String side, // buy|sell
+    required String side,
     required int quantity,
     String? investorNote,
   }) async {
@@ -45,27 +46,63 @@ class TradeOrderService {
     return inserted['id'] as String;
   }
 
-  Future<List<TradeOrderModel>> getMyOrders({int limit = 50}) async {
+  // Simple helper (non-paged)
+  Future<List<TradeOrderModel>> getMyOrders({int limit = 100}) async {
+    final page = await getMyOrdersPage(limit: limit, offset: 0);
+    return page.items;
+  }
+
+  // Filtered helper (non-paged)
+  Future<List<TradeOrderModel>> getMyOrdersFiltered({
+    String? status,
+    bool ascending = false,
+    int limit = 200,
+  }) async {
+    final page = await getMyOrdersPage(
+      status: status,
+      ascending: ascending,
+      limit: limit,
+      offset: 0,
+    );
+    return page.items;
+  }
+
+  // Paged API (server-side pagination via range on the view trade_orders_app)
+  Future<OrdersPage> getMyOrdersPage({
+    String? status,
+    bool ascending = false,
+    int limit = 30,
+    int offset = 0,
+  }) async {
     final user = _client.auth.currentUser;
     if (user == null) throw StateError('User not logged in');
 
-    final resp = await _client
-        .from('trade_orders')
-        .select(
-          'id, stock_symbol, side, quantity, status, broker_id, total_estimate, created_at, updated_at',
-        )
+    final base = _client
+        .from('trade_orders_app') // view with unified reject_reason
+        .select('*')
         .eq('user_id', user.id)
-        .isFilter('deleted_at', null)
-        .order('created_at', ascending: false)
-        .limit(limit);
+        .isFilter('deleted_at', null);
 
-    final orders = (resp as List)
-        .map((e) => TradeOrderModel.fromMap(e as Map<String, dynamic>))
-        .toList();
+    final filtered = (status != null && status.trim().isNotEmpty)
+        ? base.eq('status', status)
+        : base;
 
-    if (orders.isEmpty) return [];
+    final ordered = filtered.order('created_at', ascending: ascending);
 
-    final brokerIds = orders.map((o) => o.brokerId).toSet().toList();
+    // Ask for limit+1 (inclusive end) to detect hasMore
+    final rows = await ordered.range(offset, offset + limit);
+
+    var list = (rows as List).cast<Map<String, dynamic>>();
+    final hasMore = list.length > limit;
+    if (hasMore) list = list.sublist(0, limit);
+
+    final models = list.map((e) => TradeOrderModel.fromMap(e)).toList();
+    if (models.isEmpty) {
+      return OrdersPage(items: const [], hasMore: false, nextOffset: offset);
+    }
+
+    // Attach broker names
+    final brokerIds = models.map((o) => o.brokerId).toSet().toList();
     final brokersResp = await _client
         .from('brokers')
         .select('id,name')
@@ -76,46 +113,39 @@ class TradeOrderService {
       for (final b in brokers) b['id'] as String: b['name'] as String,
     };
 
-    return orders
+    final enriched = models
         .map((o) => o.copyWith(brokerName: nameById[o.brokerId]))
         .toList();
+
+    return OrdersPage(
+      items: enriched,
+      hasMore: hasMore,
+      nextOffset: offset + enriched.length,
+    );
   }
 
+  // Single order detail (read from view so reject_reason is unified)
   Future<TradeOrderModel?> getMyOrderById(String orderId) async {
     final user = _client.auth.currentUser;
     if (user == null) throw StateError('User not logged in');
 
-    final Map<String, dynamic>? row = await _client
-        .from('trade_orders')
-        .select(
-          'id, stock_symbol, side, quantity, status, broker_id, total_estimate, created_at, updated_at',
-        )
-        .eq('id', orderId)
+    final row = await _client
+        .from('trade_orders_app')
+        .select('*')
         .eq('user_id', user.id)
+        .eq('id', orderId)
         .isFilter('deleted_at', null)
         .maybeSingle();
 
     if (row == null) return null;
-
-    var order = TradeOrderModel.fromMap(row);
-
-    final broker = await _client
-        .from('brokers')
-        .select('name')
-        .eq('id', order.brokerId)
-        .maybeSingle();
-    if (broker != null) {
-      order = order.copyWith(brokerName: broker['name'] as String?);
-    }
-
-    return order;
+    return TradeOrderModel.fromMap(Map<String, dynamic>.from(row));
   }
 
+  // Soft delete (hide)
   Future<void> softDeleteMyOrder(String orderId) async {
     final user = _client.auth.currentUser;
     if (user == null) throw StateError('User not logged in');
 
-    // Safety: prevent removing executed/settled
     final row = await _client
         .from('trade_orders')
         .select('status')
@@ -134,4 +164,47 @@ class TradeOrderService {
         .eq('id', orderId)
         .eq('user_id', user.id);
   }
+
+  // Cancel order (only submitted/approved). Change 'canceled' -> 'cancelled' if your DB uses British spelling.
+  Future<void> cancelMyOrder(String orderId) async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw StateError('User not logged in');
+
+    final row = await _client
+        .from('trade_orders')
+        .select('status')
+        .eq('id', orderId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+    if (row == null) throw StateError('Order not found');
+
+    final status = (row['status'] ?? 'submitted').toString().toLowerCase();
+    if (status != 'submitted' && status != 'approved') {
+      throw StateError(
+        'Only submitted/approved orders can be canceled (current: $status)',
+      );
+    }
+
+    await _client
+        .from('trade_orders')
+        .update({
+          'status': 'canceled',
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        })
+        .eq('id', orderId)
+        .eq('user_id', user.id);
+  }
+}
+
+// Simple page DTO
+class OrdersPage {
+  final List<TradeOrderModel> items;
+  final bool hasMore;
+  final int nextOffset;
+  OrdersPage({
+    required this.items,
+    required this.hasMore,
+    required this.nextOffset,
+  });
 }

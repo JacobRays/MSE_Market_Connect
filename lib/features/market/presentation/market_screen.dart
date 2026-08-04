@@ -11,6 +11,7 @@ import 'package:mse_market_connect/features/market/presentation/stock_detail_scr
 import 'package:mse_market_connect/features/notifications/presentation/notifications_screen.dart';
 import 'package:mse_market_connect/shared/models/price_alert_model.dart';
 import 'package:mse_market_connect/shared/models/stock_model.dart';
+import 'package:mse_market_connect/core/theme/app_theme.dart';
 
 enum MarketView { all, watching }
 
@@ -213,7 +214,7 @@ class _MarketScreenState extends State<MarketScreen> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   const SizedBox(height: 40),
-                  const Icon(
+                  Icon(
                     Icons.error_outline,
                     color: AppTheme.lossColor,
                     size: 64,
@@ -375,9 +376,9 @@ class _StockCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isPositive = stock.changePercent >= 0;
     final flashColor = flashDir == 1
-        ? AppTheme.gainColor.withOpacity(0.10)
+        ? AppTheme.gainColor.withValues(alpha: 0.10)
         : flashDir == -1
-        ? AppTheme.lossColor.withOpacity(0.10)
+        ? AppTheme.lossColor.withValues(alpha: 0.10)
         : Colors.transparent;
 
     return Padding(

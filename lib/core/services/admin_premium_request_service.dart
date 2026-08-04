@@ -7,17 +7,16 @@ class AdminPremiumRequestView {
   final PremiumRequestModel request;
   final ProfileModel? profile;
 
-  const AdminPremiumRequestView({
-    required this.request,
-    required this.profile,
-  });
+  const AdminPremiumRequestView({required this.request, required this.profile});
 }
 
 class AdminPremiumRequestService {
   final SupabaseClient _client = Supabase.instance.client;
   final AdminSubscriptionService _subs = AdminSubscriptionService();
 
-  Future<List<AdminPremiumRequestView>> getRequestsByStatus(String status) async {
+  Future<List<AdminPremiumRequestView>> getRequestsByStatus(
+    String status,
+  ) async {
     final resp = await _client
         .from('premium_upgrade_requests')
         .select()
@@ -44,7 +43,9 @@ class AdminPremiumRequestService {
     final byId = {for (final p in profiles) p.id: p};
 
     return requests
-        .map((r) => AdminPremiumRequestView(request: r, profile: byId[r.userId]))
+        .map(
+          (r) => AdminPremiumRequestView(request: r, profile: byId[r.userId]),
+        )
         .toList();
   }
 

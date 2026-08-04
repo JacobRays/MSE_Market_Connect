@@ -13,7 +13,7 @@ class PriceAlertService {
     if (activeOnly) {
       query = query.eq('is_active', true);
     }
-    
+
     final response = await query.order('created_at', ascending: false);
     final alertsRaw = (response as List).cast<Map<String, dynamic>>();
 
@@ -38,10 +38,7 @@ class PriceAlertService {
     final merged = alertsRaw.map((a) {
       final sym = a['stock_symbol'] as String?;
       if (sym != null && bySymbol.containsKey(sym)) {
-        return {
-          ...a,
-          'stocks': bySymbol[sym],
-        };
+        return {...a, 'stocks': bySymbol[sym]};
       }
       return a;
     }).toList();

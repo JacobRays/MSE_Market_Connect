@@ -61,7 +61,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
         .maybeSingle();
 
     if (row == null) return null;
-    return row as Map<String, dynamic>;
+    return row;
   }
 
   Future<void> _refresh() async {
@@ -83,7 +83,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     if (!mounted) return;
     if (row != null) {
       setState(() {
-        _stock = StockModel.fromMap(row as Map<String, dynamic>);
+        _stock = StockModel.fromMap(row);
       });
     }
   }
@@ -242,8 +242,8 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                             child: _Sparkline(
                               values: values,
                               lineColor: AppTheme.primaryColor,
-                              fillColor: AppTheme.primaryColor.withOpacity(
-                                0.10,
+                              fillColor: AppTheme.primaryColor.withValues(
+                                alpha: 0.10,
                               ),
                             ),
                           ),

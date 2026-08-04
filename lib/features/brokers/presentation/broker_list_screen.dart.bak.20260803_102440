@@ -1,0 +1,66 @@
+import 'package:flutter/material.dart';
+import 'package:mse_market_connect/core/services/broker_service.dart';
+import 'package:mse_market_connect/features/brokers/presentation/broker_detail_screen.dart';
+import 'package:mse_market_connect/shared/models/broker_model.dart';
+
+class BrokerListScreen extends StatelessWidget {
+  const BrokerListScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final service = BrokerService();
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Licensed Brokers')),
+      body: FutureBuilder<List<BrokerModel>>(
+        future: service.getActiveBrokers(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Text('Failed to load brokers:\n${snapshot.error}'),
+            );
+          }
+
+          final brokers = snapshot.data ?? [];
+          if (brokers.isEmpty) {
+            return const Center(
+              child: Text('No licensed brokers available yet.'),
+            );
+          }
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: brokers.length,
+            itemBuilder: (context, i) {
+              final b = brokers[i];
+              final lines = <String>[
+                'Fee: ${(b.feeRate * 100).toStringAsFixed(1)}%',
+                if ((b.email ?? '').trim().isNotEmpty) b.email!.trim(),
+                if ((b.phone ?? '').trim().isNotEmpty) b.phone!.trim(),
+              ];
+
+              return Card(
+                child: ListTile(
+                  title: Text(
+                    b.name,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(lines.join('\n')),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => BrokerDetailScreen(broker: b),
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}

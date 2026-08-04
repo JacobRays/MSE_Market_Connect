@@ -34,6 +34,23 @@ class BrokerDetailScreen extends StatelessWidget {
         .toList();
   }
 
+  String _digitsOnly(String s) => s.replaceAll(RegExp(r'[^0-9]'), '');
+
+  // Key by last 9 digits (Malawi local number) to dedupe variants like "+265 999 123 456" vs "0999 123 456"
+  String _mwPhoneKey(String s) {
+    final d = _digitsOnly(s);
+    if (d.isEmpty) return '';
+    return d.length >= 9 ? d.substring(d.length - 9) : d;
+  }
+
+  // Normalize to E.164 (+265 + last 9 digits)
+  String _toE164Mw(String s) {
+    final d = _digitsOnly(s);
+    if (d.isEmpty) return '';
+    final last9 = d.length >= 9 ? d.substring(d.length - 9) : d;
+    return '+265$last9';
+  }
+
   Future<void> _open(
     BuildContext context,
     Uri uri, {
@@ -54,21 +71,23 @@ class BrokerDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final phones = <String>[
+    // Phones (primary + alt), deduped
+    final rawPhones = <String>[
       ..._splitList(broker.phone),
       ..._splitList(broker.altPhone),
     ];
 
-    // de-dupe phones
-    final phoneSet = <String>{};
-    final uniquePhones = <String>[];
-    for (final p in phones) {
-      final key = p.replaceAll(RegExp(r'\s+'), '');
-      if (key.isEmpty || phoneSet.contains(key)) continue;
-      phoneSet.add(key);
-      uniquePhones.add(p);
+    final seenPhoneKeys = <String>{};
+    final phoneItems = <_PhoneItem>[];
+    for (final p in rawPhones) {
+      final key = _mwPhoneKey(p);
+      if (key.isEmpty || !seenPhoneKeys.add(key)) continue;
+      final e164 = _toE164Mw(p);
+      if (e164.isEmpty) continue;
+      phoneItems.add(_PhoneItem(display: p, tel: e164));
     }
 
+    // Emails (primary + alt), case-insensitive dedupe
     final emails = <String>[
       ..._splitList(broker.email),
       ..._splitList(broker.altEmail),
@@ -78,8 +97,7 @@ class BrokerDetailScreen extends StatelessWidget {
     final uniqueEmails = <String>[];
     for (final e in emails) {
       final key = e.toLowerCase();
-      if (key.isEmpty || emailSet.contains(key)) continue;
-      emailSet.add(key);
+      if (key.isEmpty || !emailSet.add(key)) continue;
       uniqueEmails.add(e);
     }
 
@@ -100,6 +118,52 @@ class BrokerDetailScreen extends StatelessWidget {
         : Uri.parse(
             'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(address)}',
           );
+
+    // Build phone tiles with separators (no trailing divider)
+    final phoneTiles = phoneItems
+        .expand(
+          (it) => [
+            ListTile(
+              leading: const Icon(Icons.call_outlined),
+              title: const Text('Call'),
+              subtitle: Text(it.display),
+              trailing: const Icon(Icons.open_in_new),
+              onTap: () => _open(
+                context,
+                Uri.parse('tel:${it.tel}'),
+                fallbackCopy: it.tel,
+                label: 'Phone',
+              ),
+              onLongPress: () => _copy(context, it.tel, 'Phone'),
+            ),
+            const Divider(height: 1),
+          ],
+        )
+        .toList();
+    if (phoneTiles.isNotEmpty) phoneTiles.removeLast();
+
+    // Build email tiles with separators (no trailing divider)
+    final emailTiles = uniqueEmails
+        .expand(
+          (e) => [
+            ListTile(
+              leading: const Icon(Icons.email_outlined),
+              title: const Text('Email'),
+              subtitle: Text(e),
+              trailing: const Icon(Icons.open_in_new),
+              onTap: () => _open(
+                context,
+                Uri.parse('mailto:$e'),
+                fallbackCopy: e,
+                label: 'Email',
+              ),
+              onLongPress: () => _copy(context, e, 'Email'),
+            ),
+            const Divider(height: 1),
+          ],
+        )
+        .toList();
+    if (emailTiles.isNotEmpty) emailTiles.removeLast();
 
     return Scaffold(
       appBar: AppBar(title: Text(broker.name)),
@@ -147,35 +211,14 @@ class BrokerDetailScreen extends StatelessWidget {
           Card(
             child: Column(
               children: [
-                // Phones (primary + alts)
-                if (uniquePhones.isEmpty)
+                if (phoneItems.isEmpty)
                   const ListTile(
                     leading: Icon(Icons.call_outlined),
                     title: Text('Call'),
                     subtitle: Text('Not provided'),
                   )
                 else
-                  ...uniquePhones
-                      .expand(
-                        (p) => [
-                          ListTile(
-                            leading: const Icon(Icons.call_outlined),
-                            title: const Text('Call'),
-                            subtitle: Text(p),
-                            trailing: const Icon(Icons.open_in_new),
-                            onTap: () => _open(
-                              context,
-                              Uri.parse('tel:$p'),
-                              fallbackCopy: p,
-                              label: 'Phone',
-                            ),
-                            onLongPress: () => _copy(context, p, 'Phone'),
-                          ),
-                          const Divider(height: 1),
-                        ],
-                      )
-                      .toList()
-                    ..removeLast(), // remove last divider
+                  ...phoneTiles,
 
                 const Divider(height: 1),
 
@@ -210,27 +253,7 @@ class BrokerDetailScreen extends StatelessWidget {
                     subtitle: Text('Not provided'),
                   )
                 else
-                  ...uniqueEmails
-                      .expand(
-                        (e) => [
-                          ListTile(
-                            leading: const Icon(Icons.email_outlined),
-                            title: const Text('Email'),
-                            subtitle: Text(e),
-                            trailing: const Icon(Icons.open_in_new),
-                            onTap: () => _open(
-                              context,
-                              Uri.parse('mailto:$e'),
-                              fallbackCopy: e,
-                              label: 'Email',
-                            ),
-                            onLongPress: () => _copy(context, e, 'Email'),
-                          ),
-                          const Divider(height: 1),
-                        ],
-                      )
-                      .toList()
-                    ..removeLast(),
+                  ...emailTiles,
 
                 const Divider(height: 1),
 
@@ -304,6 +327,12 @@ class BrokerDetailScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+class _PhoneItem {
+  final String display; // as provided (nice to show)
+  final String tel; // normalized E.164 for dialing/copying
+  const _PhoneItem({required this.display, required this.tel});
 }
 
 class _Chip extends StatelessWidget {

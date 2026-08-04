@@ -8,10 +8,7 @@ import 'package:mse_market_connect/shared/models/stock_model.dart';
 class BuyOrderScreen extends StatefulWidget {
   final StockModel stock;
 
-  const BuyOrderScreen({
-    super.key,
-    required this.stock,
-  });
+  const BuyOrderScreen({super.key, required this.stock});
 
   @override
   State<BuyOrderScreen> createState() => _BuyOrderScreenState();
@@ -69,22 +66,21 @@ class _BuyOrderScreenState extends State<BuyOrderScreen> {
         broker: _selectedBroker!,
         side: 'buy',
         quantity: quantity,
-        investorNote:
-            _noteController.text.trim().isEmpty ? null : _noteController.text.trim(),
+        investorNote: _noteController.text.trim().isEmpty
+            ? null
+            : _noteController.text.trim(),
       );
 
       if (!mounted) return;
 
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => OrderSuccessScreen(orderId: orderId),
-        ),
+        MaterialPageRoute(builder: (_) => OrderSuccessScreen(orderId: orderId)),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Order submission failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Order submission failed: $e')));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -108,8 +104,10 @@ class _BuyOrderScreenState extends State<BuyOrderScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(stock.symbol,
-                          style: Theme.of(context).textTheme.headlineMedium),
+                      Text(
+                        stock.symbol,
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
                       const SizedBox(height: 8),
                       Text(stock.companyName),
                       const SizedBox(height: 12),
@@ -138,7 +136,10 @@ class _BuyOrderScreenState extends State<BuyOrderScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Quantity', style: Theme.of(context).textTheme.titleMedium),
+                      Text(
+                        'Quantity',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                       const SizedBox(height: 12),
                       TextField(
                         controller: _quantityController,
@@ -169,7 +170,10 @@ class _BuyOrderScreenState extends State<BuyOrderScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Broker', style: Theme.of(context).textTheme.titleMedium),
+                      Text(
+                        'Broker',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                       const SizedBox(height: 10),
                       ListTile(
                         contentPadding: EdgeInsets.zero,
@@ -193,14 +197,23 @@ class _BuyOrderScreenState extends State<BuyOrderScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Estimate', style: Theme.of(context).textTheme.titleMedium),
+                      Text(
+                        'Estimate',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                       const SizedBox(height: 16),
                       _row('Subtotal', 'MWK ${subtotal.toStringAsFixed(2)}'),
                       const SizedBox(height: 8),
-                      _row('Brokerage Fee', 'MWK ${brokerageFee.toStringAsFixed(2)}'),
+                      _row(
+                        'Brokerage Fee',
+                        'MWK ${brokerageFee.toStringAsFixed(2)}',
+                      ),
                       const Divider(height: 24),
-                      _row('Total Estimate', 'MWK ${totalEstimate.toStringAsFixed(2)}',
-                          bold: true),
+                      _row(
+                        'Total Estimate',
+                        'MWK ${totalEstimate.toStringAsFixed(2)}',
+                        bold: true,
+                      ),
                     ],
                   ),
                 ),
@@ -209,7 +222,9 @@ class _BuyOrderScreenState extends State<BuyOrderScreen> {
               SizedBox(
                 height: 54,
                 child: ElevatedButton(
-                  onPressed: (_submitting || quantity <= 0) ? null : _submitOrder,
+                  onPressed: (_submitting || quantity <= 0)
+                      ? null
+                      : _submitOrder,
                   child: _submitting
                       ? const SizedBox(
                           height: 22,

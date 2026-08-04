@@ -10,7 +10,7 @@ class NewsService {
         .select()
         .order('published_at', ascending: false)
         .limit(20);
-    
+
     return (response as List).map((e) => NewsModel.fromMap(e)).toList();
   }
 }

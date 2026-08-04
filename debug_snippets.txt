@@ -1,0 +1,657 @@
+==== lib/shared/models/trade_order_model.dart ====
+-- imports --
+-- content (with line numbers) --
+     1	class TradeOrderModel {
+     2	  final String id;
+     3	  final String stockSymbol;
+     4	  final String side; // buy|sell
+     5	  final int quantity;
+     6	  final String status;
+     7	
+     8	  final String brokerId;
+     9	  final String? brokerName;
+    10	
+    11	  final double? totalEstimate;
+    12	
+    13	  final DateTime createdAt;
+    14	  final DateTime updatedAt;
+    15	
+    16	  const TradeOrderModel({
+    17	    required this.id,
+    18	    required this.stockSymbol,
+    19	    required this.side,
+    20	    required this.quantity,
+    21	    required this.status,
+    22	    required this.brokerId,
+    23	    required this.createdAt,
+    24	    required this.updatedAt,
+    25	    this.brokerName,
+    26	    this.totalEstimate,
+    27	  });
+    28	
+    29	  factory TradeOrderModel.fromMap(Map<String, dynamic> map) {
+    30	    return TradeOrderModel(
+    31	      id: map['id'] as String,
+    32	      stockSymbol: map['stock_symbol'] as String,
+    33	      side: map['side'] as String,
+    34	      quantity: (map['quantity'] as num).toInt(),
+    35	      status: (map['status'] as String?) ?? 'submitted',
+    36	      brokerId: map['broker_id'] as String,
+    37	      totalEstimate: (map['total_estimate'] as num?)?.toDouble(),
+    38	      createdAt: DateTime.parse(map['created_at'] as String),
+    39	      updatedAt: DateTime.parse(map['updated_at'] as String),
+    40	    );
+    41	  }
+    42	
+    43	  TradeOrderModel copyWith({String? brokerName}) {
+    44	    return TradeOrderModel(
+    45	      id: id,
+    46	      stockSymbol: stockSymbol,
+    47	      side: side,
+    48	      quantity: quantity,
+    49	      status: status,
+    50	      brokerId: brokerId,
+    51	      brokerName: brokerName ?? this.brokerName,
+    52	      totalEstimate: totalEstimate,
+    53	      createdAt: createdAt,
+    54	      updatedAt: updatedAt,
+    55	    );
+    56	  }
+    57	}
+
+==== lib/core/services/trade_order_service.dart ====
+-- imports --
+1:import 'package:supabase_flutter/supabase_flutter.dart';
+2:import 'package:mse_market_connect/shared/models/broker_model.dart';
+3:import 'package:mse_market_connect/shared/models/stock_model.dart';
+4:import 'package:mse_market_connect/shared/models/trade_order_model.dart';
+-- content (with line numbers) --
+     1	import 'package:supabase_flutter/supabase_flutter.dart';
+     2	import 'package:mse_market_connect/shared/models/broker_model.dart';
+     3	import 'package:mse_market_connect/shared/models/stock_model.dart';
+     4	import 'package:mse_market_connect/shared/models/trade_order_model.dart';
+     5	
+     6	class TradeOrderService {
+     7	  final SupabaseClient _client = Supabase.instance.client;
+     8	
+     9	  Future<String> createMarketRequestOrder({
+    10	    required StockModel stock,
+    11	    required BrokerModel broker,
+    12	    required String side,
+    13	    required int quantity,
+    14	    String? investorNote,
+    15	  }) async {
+    16	    final user = _client.auth.currentUser;
+    17	    if (user == null) throw StateError('User not logged in');
+    18	
+    19	    final priceAtSubmission = stock.price;
+    20	    final feeRate = broker.feeRate;
+    21	
+    22	    final subtotal = quantity * priceAtSubmission;
+    23	    final feeAmount = subtotal * feeRate;
+    24	    final totalEstimate = subtotal + feeAmount;
+    25	
+    26	    final inserted = await _client
+    27	        .from('trade_orders')
+    28	        .insert({
+    29	          'user_id': user.id,
+    30	          'broker_id': broker.id,
+    31	          'stock_symbol': stock.symbol,
+    32	          'side': side,
+    33	          'quantity': quantity,
+    34	          'price_at_submission': priceAtSubmission,
+    35	          'fee_rate': feeRate,
+    36	          'fee_amount': feeAmount,
+    37	          'total_estimate': totalEstimate,
+    38	          'status': 'submitted',
+    39	          'investor_note': investorNote,
+    40	          'deleted_at': null,
+    41	        })
+    42	        .select('id')
+    43	        .single();
+    44	
+    45	    return inserted['id'] as String;
+    46	  }
+    47	
+    48	  Future<List<TradeOrderModel>> getMyOrders({int limit = 50}) async {
+    49	    final user = _client.auth.currentUser;
+    50	    if (user == null) throw StateError('User not logged in');
+    51	
+    52	    final resp = await _client
+    53	        .from('trade_orders')
+    54	        .select(
+    55	          'id, stock_symbol, side, quantity, status, broker_id, total_estimate, created_at, updated_at',
+    56	        )
+    57	        .eq('user_id', user.id)
+    58	        .isFilter('deleted_at', null)
+    59	        .order('created_at', ascending: false)
+    60	        .limit(limit);
+    61	
+    62	    final orders = (resp as List)
+    63	        .map((e) => TradeOrderModel.fromMap(e as Map<String, dynamic>))
+    64	        .toList();
+    65	
+    66	    if (orders.isEmpty) return [];
+    67	
+    68	    final brokerIds = orders.map((o) => o.brokerId).toSet().toList();
+    69	    final brokersResp = await _client
+    70	        .from('brokers')
+    71	        .select('id,name')
+    72	        .inFilter('id', brokerIds);
+    73	
+    74	    final brokers = (brokersResp as List).cast<Map<String, dynamic>>();
+    75	    final nameById = {
+    76	      for (final b in brokers) b['id'] as String: b['name'] as String,
+    77	    };
+    78	
+    79	    return orders
+    80	        .map((o) => o.copyWith(brokerName: nameById[o.brokerId]))
+    81	        .toList();
+    82	  }
+    83	
+    84	  Future<void> softDeleteMyOrder(String orderId) async {
+    85	    final user = _client.auth.currentUser;
+    86	    if (user == null) throw StateError('User not logged in');
+    87	
+    88	    final row = await _client
+    89	        .from('trade_orders')
+    90	        .select('status')
+    91	        .eq('id', orderId)
+    92	        .eq('user_id', user.id)
+    93	        .maybeSingle();
+    94	
+    95	    final status = (row?['status'] ?? 'submitted').toString().toLowerCase();
+    96	    if (status == 'executed' || status == 'settled') {
+    97	      throw StateError('Cannot delete an $status order');
+    98	    }
+    99	
+   100	    await _client
+   101	        .from('trade_orders')
+   102	        .update({'deleted_at': DateTime.now().toUtc().toIso8601String()})
+   103	        .eq('id', orderId)
+   104	        .eq('user_id', user.id);
+   105	  }
+   106	}
+
+==== lib/features/trade/presentation/order_detail_screen.dart ====
+-- imports --
+1:import 'package:flutter/material.dart';
+2:import 'package:mse_market_connect/core/services/trade_order_service.dart';
+3:import 'package:mse_market_connect/shared/models/trade_order_model.dart';
+-- content (with line numbers) --
+     1	import 'package:flutter/material.dart';
+     2	import 'package:mse_market_connect/core/services/trade_order_service.dart';
+     3	import 'package:mse_market_connect/shared/models/trade_order_model.dart';
+     4	
+     5	class OrderDetailScreen extends StatefulWidget {
+     6	  final String orderId;
+     7	  const OrderDetailScreen({super.key, required this.orderId});
+     8	
+     9	  @override
+    10	  State<OrderDetailScreen> createState() => _OrderDetailScreenState();
+    11	}
+    12	
+    13	class _OrderDetailScreenState extends State<OrderDetailScreen> {
+    14	  final _service = TradeOrderService();
+    15	  late Future<TradeOrderModel?> _future;
+    16	
+    17	  @override
+    18	  void initState() {
+    19	    super.initState();
+    20	    _future = _service.getMyOrderById(widget.orderId);
+    21	  }
+    22	
+    23	  Future<void> _refresh() async {
+    24	    setState(() => _future = _service.getMyOrderById(widget.orderId));
+    25	    await _future;
+    26	  }
+    27	
+    28	  @override
+    29	  Widget build(BuildContext context) {
+    30	    return Scaffold(
+    31	      appBar: AppBar(title: const Text('Order Tracking')),
+    32	      body: RefreshIndicator(
+    33	        onRefresh: _refresh,
+    34	        child: FutureBuilder<TradeOrderModel?>(
+    35	          future: _future,
+    36	          builder: (context, snapshot) {
+    37	            if (snapshot.connectionState == ConnectionState.waiting) {
+    38	              return const Center(child: CircularProgressIndicator());
+    39	            }
+    40	            if (snapshot.hasError) {
+    41	              return ListView(
+    42	                physics: const AlwaysScrollableScrollPhysics(),
+    43	                padding: const EdgeInsets.all(16),
+    44	                children: [Text('Failed to load order.\n${snapshot.error}')],
+    45	              );
+    46	            }
+    47	
+    48	            final o = snapshot.data;
+    49	            if (o == null) {
+    50	              return ListView(
+    51	                physics: const AlwaysScrollableScrollPhysics(),
+    52	                padding: const EdgeInsets.all(16),
+    53	                children: const [SizedBox(height: 40), Center(child: Text('Order not found.'))],
+    54	              );
+    55	            }
+    56	
+    57	            return ListView(
+    58	              physics: const AlwaysScrollableScrollPhysics(),
+    59	              padding: const EdgeInsets.all(16),
+    60	              children: [
+    61	                Card(
+    62	                  child: Padding(
+    63	                    padding: const EdgeInsets.all(16),
+    64	                    child: Column(
+    65	                      crossAxisAlignment: CrossAxisAlignment.start,
+    66	                      children: [
+    67	                        Text('${o.stockSymbol} • ${o.side.toUpperCase()}',
+    68	                            style: Theme.of(context).textTheme.titleLarge),
+    69	                        const SizedBox(height: 8),
+    70	                        Text('Quantity: ${o.quantity}'),
+    71	                        Text('Broker: ${o.brokerName ?? o.brokerId}'),
+    72	                        const SizedBox(height: 8),
+    73	                        Text('Status: ${o.status.toUpperCase()}'),
+    74	                        const SizedBox(height: 8),
+    75	                        Text('Created: ${o.createdAt}'),
+    76	                        Text('Updated: ${o.updatedAt}'),
+    77	                        if (o.totalEstimate != null)
+    78	                          Text('Total estimate: MWK ${o.totalEstimate!.toStringAsFixed(2)}'),
+    79	                      ],
+    80	                    ),
+    81	                  ),
+    82	                ),
+    83	              ],
+    84	            );
+    85	          },
+    86	        ),
+    87	      ),
+    88	    );
+    89	  }
+    90	}
+
+==== lib/features/portfolio/presentation/portfolio_screen.dart ====
+-- imports --
+1:import 'dart:async';
+3:import 'package:flutter/material.dart';
+4:import 'package:mse_market_connect/core/services/portfolio_service.dart';
+5:import 'package:mse_market_connect/core/services/trade_order_service.dart';
+6:import 'package:mse_market_connect/core/theme/app_theme.dart';
+7:import 'package:mse_market_connect/features/trade/presentation/my_orders_screen.dart';
+8:import 'package:mse_market_connect/features/trade/presentation/order_detail_screen.dart';
+9:import 'package:mse_market_connect/shared/models/holding_model.dart';
+11:import 'package:mse_market_connect/shared/widgets/company_logo.dart';
+12:import 'package:shared_preferences/shared_preferences.dart';
+13:import 'package:supabase_flutter/supabase_flutter.dart';
+-- content (with line numbers) --
+     1	import 'dart:async';
+     2	
+     3	import 'package:flutter/material.dart';
+     4	import 'package:mse_market_connect/core/services/portfolio_service.dart';
+     5	import 'package:mse_market_connect/core/services/trade_order_service.dart';
+     6	import 'package:mse_market_connect/core/theme/app_theme.dart';
+     7	import 'package:mse_market_connect/features/trade/presentation/my_orders_screen.dart';
+     8	import 'package:mse_market_connect/features/trade/presentation/order_detail_screen.dart';
+     9	import 'package:mse_market_connect/shared/models/holding_model.dart';
+    10	
+    11	import 'package:mse_market_connect/shared/widgets/company_logo.dart';
+    12	import 'package:shared_preferences/shared_preferences.dart';
+    13	import 'package:supabase_flutter/supabase_flutter.dart';
+    14	
+    15	class PortfolioScreen extends StatefulWidget {
+    16	  const PortfolioScreen({super.key});
+    17	
+    18	  @override
+    19	  State<PortfolioScreen> createState() => _PortfolioScreenState();
+    20	}
+    21	
+    22	class _PortfolioScreenState extends State<PortfolioScreen> {
+    23	  final _portfolioService = PortfolioService();
+    24	  final _orderService = TradeOrderService();
+    25	
+    26	  List<HoldingModel> _holdings = [];
+    27	  List<TradeOrderModel> _recentOrders = [];
+    28	  bool _loading = true;
+    29	
+    30	  bool _hideBalances = false;
+    31	
+    32	  RealtimeChannel? _stocksChannel;
+    33	
+    34	  @override
+    35	  void initState() {
+    36	    super.initState();
+    37	    _loadPrefs();
+    38	    _loadData();
+    39	    _listenStocksRealtime();
+    40	  }
+    41	
+    42	  @override
+    43	  void dispose() {
+    44	    if (_stocksChannel != null) {
+    45	      Supabase.instance.client.removeChannel(_stocksChannel!);
+    46	    }
+    47	    super.dispose();
+    48	  }
+    49	
+    50	  Future<void> _loadPrefs() async {
+    51	    final prefs = await SharedPreferences.getInstance();
+    52	    if (!mounted) return;
+    53	    setState(() {
+    54	      _hideBalances = prefs.getBool('hide_balances') ?? false;
+    55	    });
+    56	  }
+    57	
+    58	  Future<void> _loadData() async {
+    59	    setState(() => _loading = true);
+    60	    final h = await _portfolioService.getMyHoldings();
+    61	    final o = await _orderService.getMyOrders(limit: 5);
+    62	    if (!mounted) return;
+    63	
+    64	    setState(() {
+    65	      _holdings = h;
+    66	      _recentOrders = o;
+    67	      _loading = false;
+    68	    });
+    69	  }
+    70	
+    71	  void _listenStocksRealtime() {
+    72	    // Updates portfolio values as stocks update (requires realtime enabled for `stocks`)
+    73	    _stocksChannel = Supabase.instance.client
+    74	        .channel('portfolio-stocks-live')
+    75	        .onPostgresChanges(
+    76	          event: PostgresChangeEvent.update,
+    77	          schema: 'public',
+    78	          table: 'stocks',
+    79	          callback: (payload) {
+    80	            final rec = payload.newRecord;
+    81	            if (rec.isEmpty) return;
+    82	
+    83	            final symbol = (rec['symbol'] ?? '').toString().toUpperCase();
+    84	            if (symbol.isEmpty) return;
+    85	
+    86	            final idx = _holdings.indexWhere((h) => h.symbol == symbol);
+    87	            if (idx == -1) return;
+    88	
+    89	            final price = (rec['price'] as num?)?.toDouble();
+    90	            final chg = (rec['change_percent'] as num?)?.toDouble();
+    91	
+    92	            setState(() {
+    93	              final updated = _holdings[idx].copyWith(
+    94	                currentPrice: price ?? _holdings[idx].currentPrice,
+    95	                changePercent: chg ?? _holdings[idx].changePercent,
+    96	              );
+    97	              final copy = [..._holdings];
+    98	              copy[idx] = updated;
+    99	              _holdings = copy;
+   100	            });
+   101	          },
+   102	        )
+   103	        .subscribe();
+   104	  }
+   105	
+   106	  String _mwk(double v) {
+   107	    if (_hideBalances) return 'MWK ••••';
+   108	    return 'MWK ${v.toStringAsFixed(2)}';
+   109	  }
+   110	
+   111	  @override
+   112	  Widget build(BuildContext context) {
+   113	    final totalValue = _holdings.fold<double>(
+   114	      0,
+   115	      (sum, h) => sum + h.marketValue,
+   116	    );
+   117	    final totalCost = _holdings.fold<double>(0, (sum, h) => sum + h.totalCost);
+   118	    final totalGain = totalValue - totalCost;
+   119	    final totalGainPct = totalCost > 0 ? (totalGain / totalCost) * 100 : 0.0;
+   120	
+   121	    if (_loading) {
+   122	      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+   123	    }
+   124	
+   125	    return Scaffold(
+   126	      appBar: AppBar(
+   127	        title: const Text('Portfolio'),
+   128	        actions: [
+   129	          IconButton(
+   130	            icon: const Icon(Icons.receipt_long),
+   131	            tooltip: 'My Orders',
+   132	            onPressed: () => Navigator.push(
+   133	              context,
+   134	              MaterialPageRoute(builder: (_) => const MyOrdersScreen()),
+   135	            ),
+   136	          ),
+   137	        ],
+   138	      ),
+   139	      body: RefreshIndicator(
+   140	        onRefresh: _loadData,
+   141	        child: ListView(
+   142	          padding: const EdgeInsets.all(16),
+   143	          children: [
+   144	            Card(
+   145	              color: AppTheme.primaryColor,
+   146	              child: Padding(
+   147	                padding: const EdgeInsets.all(20),
+   148	                child: Column(
+   149	                  crossAxisAlignment: CrossAxisAlignment.start,
+   150	                  children: [
+   151	                    const Text(
+   152	                      'TOTAL MARKET VALUE',
+   153	                      style: TextStyle(color: Colors.white70, fontSize: 12),
+   154	                    ),
+   155	                    const SizedBox(height: 8),
+   156	                    Text(
+   157	                      _mwk(totalValue),
+   158	                      style: const TextStyle(
+   159	                        color: Colors.white,
+   160	                        fontSize: 28,
+   161	                        fontWeight: FontWeight.bold,
+   162	                      ),
+   163	                    ),
+   164	                    const SizedBox(height: 10),
+   165	                    Row(
+   166	                      children: [
+   167	                        Text(
+   168	                          _hideBalances
+   169	                              ? 'P/L: ••••'
+   170	                              : 'P/L: ${totalGain >= 0 ? '+' : ''}${_mwk(totalGain)}',
+   171	                          style: TextStyle(
+   172	                            color: totalGain >= 0
+   173	                                ? Colors.greenAccent
+   174	                                : Colors.redAccent,
+   175	                            fontWeight: FontWeight.w800,
+   176	                          ),
+   177	                        ),
+   178	                        const SizedBox(width: 12),
+   179	                        Text(
+   180	                          _hideBalances
+   181	                              ? ''
+   182	                              : '(${totalGainPct >= 0 ? '+' : ''}${totalGainPct.toStringAsFixed(2)}%)',
+   183	                          style: const TextStyle(
+   184	                            color: Colors.white70,
+   185	                            fontWeight: FontWeight.w700,
+   186	                          ),
+   187	                        ),
+   188	                      ],
+   189	                    ),
+   190	                  ],
+   191	                ),
+   192	              ),
+   193	            ),
+   194	            const SizedBox(height: 18),
+   195	
+   196	            Text(
+   197	              'YOUR COMPANIES',
+   198	              style: Theme.of(
+   199	                context,
+   200	              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+   201	            ),
+   202	            const SizedBox(height: 10),
+   203	            if (_holdings.isEmpty)
+   204	              const Card(
+   205	                child: Padding(
+   206	                  padding: EdgeInsets.all(16),
+   207	                  child: Text('No shares owned yet.'),
+   208	                ),
+   209	              )
+   210	            else
+   211	              ..._holdings.map((h) {
+   212	                final isUp = h.changePercent >= 0;
+   213	                final isGain = h.gainLoss >= 0;
+   214	
+   215	                return Card(
+   216	                  child: Padding(
+   217	                    padding: const EdgeInsets.all(16),
+   218	                    child: Row(
+   219	                      crossAxisAlignment: CrossAxisAlignment.start,
+   220	                      children: [
+   221	                        CompanyLogo(
+   222	                          symbol: h.symbol,
+   223	                          logoUrl: h.logoUrl,
+   224	                          size: 46,
+   225	                        ),
+   226	                        const SizedBox(width: 12),
+   227	                        Expanded(
+   228	                          child: Column(
+   229	                            crossAxisAlignment: CrossAxisAlignment.start,
+   230	                            children: [
+   231	                              Text(
+   232	                                h.symbol,
+   233	                                style: const TextStyle(
+   234	                                  fontWeight: FontWeight.w900,
+   235	                                  fontSize: 16,
+   236	                                ),
+   237	                              ),
+   238	                              const SizedBox(height: 4),
+   239	                              Text(
+   240	                                h.companyName.isEmpty
+   241	                                    ? 'Company'
+   242	                                    : h.companyName,
+   243	                                maxLines: 1,
+   244	                                overflow: TextOverflow.ellipsis,
+   245	                                style: const TextStyle(color: Colors.black54),
+   246	                              ),
+   247	                              const SizedBox(height: 10),
+   248	                              Text(
+   249	                                '${h.shares} shares • Avg ${h.avgCost.toStringAsFixed(2)}',
+   250	                              ),
+   251	                              const SizedBox(height: 6),
+   252	                              Text(
+   253	                                'Price: ${_hideBalances ? 'MWK ••••' : h.currentPrice.toStringAsFixed(2)}',
+   254	                              ),
+   255	                            ],
+   256	                          ),
+   257	                        ),
+   258	                        const SizedBox(width: 12),
+   259	                        Column(
+   260	                          crossAxisAlignment: CrossAxisAlignment.end,
+   261	                          children: [
+   262	                            Text(
+   263	                              _mwk(h.marketValue),
+   264	                              style: const TextStyle(
+   265	                                fontWeight: FontWeight.w900,
+   266	                              ),
+   267	                            ),
+   268	                            const SizedBox(height: 6),
+   269	                            Row(
+   270	                              mainAxisSize: MainAxisSize.min,
+   271	                              children: [
+   272	                                Icon(
+   273	                                  isUp
+   274	                                      ? Icons.arrow_upward
+   275	                                      : Icons.arrow_downward,
+   276	                                  size: 14,
+   277	                                  color: isUp
+   278	                                      ? AppTheme.gainColor
+   279	                                      : AppTheme.lossColor,
+   280	                                ),
+   281	                                const SizedBox(width: 2),
+   282	                                Text(
+   283	                                  '${isUp ? '+' : ''}${h.changePercent.toStringAsFixed(2)}%',
+   284	                                  style: TextStyle(
+   285	                                    color: isUp
+   286	                                        ? AppTheme.gainColor
+   287	                                        : AppTheme.lossColor,
+   288	                                    fontWeight: FontWeight.w800,
+   289	                                    fontSize: 12,
+   290	                                  ),
+   291	                                ),
+   292	                              ],
+   293	                            ),
+   294	                            const SizedBox(height: 10),
+   295	                            Text(
+   296	                              _hideBalances
+   297	                                  ? 'P/L ••••'
+   298	                                  : 'P/L ${isGain ? '+' : ''}${h.gainLoss.toStringAsFixed(2)}',
+   299	                              style: TextStyle(
+   300	                                color: isGain
+   301	                                    ? AppTheme.gainColor
+   302	                                    : AppTheme.lossColor,
+   303	                                fontWeight: FontWeight.w800,
+   304	                                fontSize: 12,
+   305	                              ),
+   306	                            ),
+   307	                            Text(
+   308	                              '(${h.gainLossPercent >= 0 ? '+' : ''}${h.gainLossPercent.toStringAsFixed(2)}%)',
+   309	                              style: const TextStyle(
+   310	                                color: Colors.black54,
+   311	                                fontSize: 12,
+   312	                              ),
+   313	                            ),
+   314	                          ],
+   315	                        ),
+   316	                      ],
+   317	                    ),
+   318	                  ),
+   319	                );
+   320	              }),
+   321	
+   322	            const SizedBox(height: 18),
+   323	            Text(
+   324	              'RECENT ORDERS',
+   325	              style: Theme.of(
+   326	                context,
+   327	              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+   328	            ),
+   329	            const SizedBox(height: 10),
+   330	            ..._recentOrders.map((o) {
+   331	              return Card(
+   332	                child: ListTile(
+   333	                  onTap: () => Navigator.push(
+   334	                    context,
+   335	                    MaterialPageRoute(
+   336	                      builder: (_) => OrderDetailScreen(orderId: o.id),
+   337	                    ),
+   338	                  ),
+   339	                  title: Text('${o.stockSymbol} ${o.side.toUpperCase()}'),
+   340	                  subtitle: Text(
+   341	                    'Qty: ${o.quantity} • Status: ${o.status.toUpperCase()}',
+   342	                  ),
+   343	                  trailing: const Icon(Icons.chevron_right),
+   344	                ),
+   345	              );
+   346	            }),
+   347	          ],
+   348	        ),
+   349	      ),
+   350	    );
+   351	  }
+   352	}
+
+==== where is TradeOrderModel defined? ====
+lib/shared/models/trade_order_model.dart:1:class TradeOrderModel {
+
+==== references to getMyOrderById / getOrderById ====
+lib/features/trade/presentation/order_detail_screen.dart:20:    _future = _service.getMyOrderById(widget.orderId);
+lib/features/trade/presentation/order_detail_screen.dart:24:    setState(() => _future = _service.getMyOrderById(widget.orderId));
+
+==== references to trade_order_model import paths ====
+lib/core/services/trade_order_service.dart:4:import 'package:mse_market_connect/shared/models/trade_order_model.dart';
+lib/features/trade/presentation/order_detail_screen.dart:3:import 'package:mse_market_connect/shared/models/trade_order_model.dart';
+lib/features/trade/presentation/my_orders_screen.dart:4:import 'package:mse_market_connect/shared/models/trade_order_model.dart';
+
+==== ls -l of target files ====
+-rw-rw-rw- 1 vscode vscode  3355 Jul 29 12:54 lib/core/services/trade_order_service.dart
+-rw-rw-rw- 1 vscode vscode 12984 Jul 30 08:48 lib/features/portfolio/presentation/portfolio_screen.dart
+-rw-rw-rw- 1 vscode vscode  3244 May 11 07:58 lib/features/trade/presentation/order_detail_screen.dart
+-rw-rw-rw- 1 vscode vscode  1518 May 11 07:57 lib/shared/models/trade_order_model.dart
+Done. Collected snippets saved to: debug_snippets.txt

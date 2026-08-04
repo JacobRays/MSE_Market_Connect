@@ -84,9 +84,9 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
   Future<void> _submit() async {
     final amount = double.tryParse(_amountController.text.trim());
     if (amount == null || amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid amount')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Enter a valid amount')));
       return;
     }
     if (_picked?.bytes == null) {
@@ -125,9 +125,9 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Submission failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Submission failed: $e')));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -189,9 +189,18 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                           DropdownButtonFormField<String>(
                             initialValue: _method,
                             items: const [
-                              DropdownMenuItem(value: 'mpamba', child: Text('TNM Mpamba')),
-                              DropdownMenuItem(value: 'airtel', child: Text('Airtel Money')),
-                              DropdownMenuItem(value: 'bank', child: Text('Bank Transfer')),
+                              DropdownMenuItem(
+                                value: 'mpamba',
+                                child: Text('TNM Mpamba'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'airtel',
+                                child: Text('Airtel Money'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'bank',
+                                child: Text('Bank Transfer'),
+                              ),
                             ],
                             onChanged: (v) => setState(() => _method = v),
                             decoration: const InputDecoration(
@@ -202,7 +211,9 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                           TextField(
                             controller: _amountController,
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: 'Amount (MWK)'),
+                            decoration: const InputDecoration(
+                              labelText: 'Amount (MWK)',
+                            ),
                           ),
                           const SizedBox(height: 12),
                           TextField(
@@ -232,7 +243,9 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                                   ? const SizedBox(
                                       height: 22,
                                       width: 22,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
                                     )
                                   : const Text('Submit for approval'),
                             ),
@@ -242,7 +255,10 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Text('Your requests', style: Theme.of(context).textTheme.titleLarge),
+                  Text(
+                    'Your requests',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                   const SizedBox(height: 10),
                   if (_requests.isEmpty)
                     const Card(
@@ -255,7 +271,8 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                     ..._requests.map((r) {
                       final status = r.status;
                       final label = _statusLabel(status);
-                      final reason = (status == 'rejected' &&
+                      final reason =
+                          (status == 'rejected' &&
                               r.adminNote != null &&
                               r.adminNote!.trim().isNotEmpty)
                           ? 'REJECTED — reason: ${r.adminNote}'
@@ -265,7 +282,9 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                         padding: const EdgeInsets.only(bottom: 12),
                         child: Card(
                           child: ListTile(
-                            title: Text('MWK ${r.amount.toStringAsFixed(0)} • $label'),
+                            title: Text(
+                              'MWK ${r.amount.toStringAsFixed(0)} • $label',
+                            ),
                             subtitle: Text(
                               reason ??
                                   ((r.payerReference == null ||

@@ -1,0 +1,352 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:mse_market_connect/core/services/portfolio_service.dart';
+import 'package:mse_market_connect/core/services/trade_order_service.dart';
+import 'package:mse_market_connect/core/theme/app_theme.dart';
+import 'package:mse_market_connect/features/trade/presentation/my_orders_screen.dart';
+import 'package:mse_market_connect/features/trade/presentation/order_detail_screen.dart';
+import 'package:mse_market_connect/shared/models/holding_model.dart';
+
+import 'package:mse_market_connect/shared/widgets/company_logo.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+class PortfolioScreen extends StatefulWidget {
+  const PortfolioScreen({super.key});
+
+  @override
+  State<PortfolioScreen> createState() => _PortfolioScreenState();
+}
+
+class _PortfolioScreenState extends State<PortfolioScreen> {
+  final _portfolioService = PortfolioService();
+  final _orderService = TradeOrderService();
+
+  List<HoldingModel> _holdings = [];
+  List<TradeOrderModel> _recentOrders = [];
+  bool _loading = true;
+
+  bool _hideBalances = false;
+
+  RealtimeChannel? _stocksChannel;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrefs();
+    _loadData();
+    _listenStocksRealtime();
+  }
+
+  @override
+  void dispose() {
+    if (_stocksChannel != null) {
+      Supabase.instance.client.removeChannel(_stocksChannel!);
+    }
+    super.dispose();
+  }
+
+  Future<void> _loadPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _hideBalances = prefs.getBool('hide_balances') ?? false;
+    });
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _loading = true);
+    final h = await _portfolioService.getMyHoldings();
+    final o = await _orderService.getMyOrders(limit: 5);
+    if (!mounted) return;
+
+    setState(() {
+      _holdings = h;
+      _recentOrders = o;
+      _loading = false;
+    });
+  }
+
+  void _listenStocksRealtime() {
+    // Updates portfolio values as stocks update (requires realtime enabled for `stocks`)
+    _stocksChannel = Supabase.instance.client
+        .channel('portfolio-stocks-live')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'stocks',
+          callback: (payload) {
+            final rec = payload.newRecord;
+            if (rec.isEmpty) return;
+
+            final symbol = (rec['symbol'] ?? '').toString().toUpperCase();
+            if (symbol.isEmpty) return;
+
+            final idx = _holdings.indexWhere((h) => h.symbol == symbol);
+            if (idx == -1) return;
+
+            final price = (rec['price'] as num?)?.toDouble();
+            final chg = (rec['change_percent'] as num?)?.toDouble();
+
+            setState(() {
+              final updated = _holdings[idx].copyWith(
+                currentPrice: price ?? _holdings[idx].currentPrice,
+                changePercent: chg ?? _holdings[idx].changePercent,
+              );
+              final copy = [..._holdings];
+              copy[idx] = updated;
+              _holdings = copy;
+            });
+          },
+        )
+        .subscribe();
+  }
+
+  String _mwk(double v) {
+    if (_hideBalances) return 'MWK ••••';
+    return 'MWK ${v.toStringAsFixed(2)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final totalValue = _holdings.fold<double>(
+      0,
+      (sum, h) => sum + h.marketValue,
+    );
+    final totalCost = _holdings.fold<double>(0, (sum, h) => sum + h.totalCost);
+    final totalGain = totalValue - totalCost;
+    final totalGainPct = totalCost > 0 ? (totalGain / totalCost) * 100 : 0.0;
+
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Portfolio'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.receipt_long),
+            tooltip: 'My Orders',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const MyOrdersScreen()),
+            ),
+          ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: _loadData,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Card(
+              color: AppTheme.primaryColor,
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'TOTAL MARKET VALUE',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _mwk(totalValue),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Text(
+                          _hideBalances
+                              ? 'P/L: ••••'
+                              : 'P/L: ${totalGain >= 0 ? '+' : ''}${_mwk(totalGain)}',
+                          style: TextStyle(
+                            color: totalGain >= 0
+                                ? Colors.greenAccent
+                                : Colors.redAccent,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          _hideBalances
+                              ? ''
+                              : '(${totalGainPct >= 0 ? '+' : ''}${totalGainPct.toStringAsFixed(2)}%)',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+
+            Text(
+              'YOUR COMPANIES',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 10),
+            if (_holdings.isEmpty)
+              const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('No shares owned yet.'),
+                ),
+              )
+            else
+              ..._holdings.map((h) {
+                final isUp = h.changePercent >= 0;
+                final isGain = h.gainLoss >= 0;
+
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        CompanyLogo(
+                          symbol: h.symbol,
+                          logoUrl: h.logoUrl,
+                          size: 46,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                h.symbol,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                h.companyName.isEmpty
+                                    ? 'Company'
+                                    : h.companyName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Colors.black54),
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                '${h.shares} shares • Avg ${h.avgCost.toStringAsFixed(2)}',
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Price: ${_hideBalances ? 'MWK ••••' : h.currentPrice.toStringAsFixed(2)}',
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              _mwk(h.marketValue),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  isUp
+                                      ? Icons.arrow_upward
+                                      : Icons.arrow_downward,
+                                  size: 14,
+                                  color: isUp
+                                      ? AppTheme.gainColor
+                                      : AppTheme.lossColor,
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  '${isUp ? '+' : ''}${h.changePercent.toStringAsFixed(2)}%',
+                                  style: TextStyle(
+                                    color: isUp
+                                        ? AppTheme.gainColor
+                                        : AppTheme.lossColor,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              _hideBalances
+                                  ? 'P/L ••••'
+                                  : 'P/L ${isGain ? '+' : ''}${h.gainLoss.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                color: isGain
+                                    ? AppTheme.gainColor
+                                    : AppTheme.lossColor,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                              ),
+                            ),
+                            Text(
+                              '(${h.gainLossPercent >= 0 ? '+' : ''}${h.gainLossPercent.toStringAsFixed(2)}%)',
+                              style: const TextStyle(
+                                color: Colors.black54,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+
+            const SizedBox(height: 18),
+            Text(
+              'RECENT ORDERS',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 10),
+            ..._recentOrders.map((o) {
+              return Card(
+                child: ListTile(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => OrderDetailScreen(orderId: o.id),
+                    ),
+                  ),
+                  title: Text('${o.stockSymbol} ${o.side.toUpperCase()}'),
+                  subtitle: Text(
+                    'Qty: ${o.quantity} • Status: ${o.status.toUpperCase()}',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -20,7 +20,9 @@ class StockPickerScreen extends StatelessWidget {
           if (snapshot.hasError) {
             return Padding(
               padding: const EdgeInsets.all(16),
-              child: Center(child: Text('Failed to load companies.\n${snapshot.error}')),
+              child: Center(
+                child: Text('Failed to load companies.\n${snapshot.error}'),
+              ),
             );
           }
 

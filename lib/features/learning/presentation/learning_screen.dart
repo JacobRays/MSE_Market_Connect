@@ -80,9 +80,7 @@ class LearningScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Learning Hub'),
-      ),
+      appBar: AppBar(title: const Text('Learning Hub')),
       body: ListView.separated(
         padding: const EdgeInsets.all(16),
         itemCount: _articles.length,

@@ -6,7 +6,8 @@ class BrokerOrderDetailScreen extends StatefulWidget {
   const BrokerOrderDetailScreen({super.key, required this.orderId});
 
   @override
-  State<BrokerOrderDetailScreen> createState() => _BrokerOrderDetailScreenState();
+  State<BrokerOrderDetailScreen> createState() =>
+      _BrokerOrderDetailScreenState();
 }
 
 class _BrokerOrderDetailScreenState extends State<BrokerOrderDetailScreen> {
@@ -39,13 +40,15 @@ class _BrokerOrderDetailScreenState extends State<BrokerOrderDetailScreen> {
   }
 
   Future<void> _save() async {
-    await Supabase.instance.client.from('trade_orders').update({
-      'status': _status,
-      'broker_note': _note.text,
-    }).eq('id', widget.orderId);
-    
+    await Supabase.instance.client
+        .from('trade_orders')
+        .update({'status': _status, 'broker_note': _note.text})
+        .eq('id', widget.orderId);
+
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Order Updated & User Notified')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Order Updated & User Notified')),
+      );
       Navigator.pop(context);
     }
   }
@@ -55,7 +58,7 @@ class _BrokerOrderDetailScreenState extends State<BrokerOrderDetailScreen> {
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    
+
     final profile = _order?['profiles'] as Map<String, dynamic>?;
 
     return Scaffold(
@@ -66,30 +69,58 @@ class _BrokerOrderDetailScreenState extends State<BrokerOrderDetailScreen> {
           Card(
             color: Colors.blue.shade50,
             child: ListTile(
-              title: const Text('SENDER DETAILS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-              subtitle: Text('Name: ${profile?['full_name'] ?? 'Not set'}\nEmail: ${profile?['email']}\nPhone: ${profile?['phone'] ?? 'Not provided'}\nUser ID: ${_order?['user_id']}'),
+              title: const Text(
+                'SENDER DETAILS',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+              ),
+              subtitle: Text(
+                'Name: ${profile?['full_name'] ?? 'Not set'}\nEmail: ${profile?['email']}\nPhone: ${profile?['phone'] ?? 'Not provided'}\nUser ID: ${_order?['user_id']}',
+              ),
             ),
           ),
           const SizedBox(height: 16),
-          Text('Order: ${_order?['stock_symbol']} ${_order?['side']?.toString().toUpperCase()}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(
+            'Order: ${_order?['stock_symbol']} ${_order?['side']?.toString().toUpperCase()}',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
           Text('Quantity: ${_order?['quantity']}'),
           const Divider(),
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
             initialValue: _status,
-            items: ['submitted', 'received', 'approved', 'rejected', 'executed', 'settled']
-                .map((s) => DropdownMenuItem(value: s, child: Text(s.toUpperCase()))).toList(),
+            items:
+                [
+                      'submitted',
+                      'received',
+                      'approved',
+                      'rejected',
+                      'executed',
+                      'settled',
+                    ]
+                    .map(
+                      (s) => DropdownMenuItem(
+                        value: s,
+                        child: Text(s.toUpperCase()),
+                      ),
+                    )
+                    .toList(),
             onChanged: (v) => setState(() => _status = v),
             decoration: const InputDecoration(labelText: 'Set Status'),
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _note,
-            decoration: const InputDecoration(labelText: 'Response / Note to User', hintText: 'Example: Payment not seen'),
+            decoration: const InputDecoration(
+              labelText: 'Response / Note to User',
+              hintText: 'Example: Payment not seen',
+            ),
             maxLines: 3,
           ),
           const SizedBox(height: 24),
-          ElevatedButton(onPressed: _save, child: const Text('SAVE & NOTIFY USER')),
+          ElevatedButton(
+            onPressed: _save,
+            child: const Text('SAVE & NOTIFY USER'),
+          ),
         ],
       ),
     );

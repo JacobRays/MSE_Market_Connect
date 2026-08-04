@@ -11,10 +11,7 @@ class AuthService {
     required String email,
     required String password,
   }) async {
-    return await _client.auth.signUp(
-      email: email,
-      password: password,
-    );
+    return await _client.auth.signUp(email: email, password: password);
   }
 
   Future<AuthResponse> signIn({

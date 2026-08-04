@@ -14,9 +14,12 @@ class PremiumUpgradeService {
     if (user == null) throw StateError('User not logged in');
 
     final safeName = fileName.replaceAll(' ', '_');
-    final path = '${user.id}/premium/${DateTime.now().millisecondsSinceEpoch}_$safeName';
+    final path =
+        '${user.id}/premium/${DateTime.now().millisecondsSinceEpoch}_$safeName';
 
-    await _client.storage.from('premium-receipts').uploadBinary(
+    await _client.storage
+        .from('premium-receipts')
+        .uploadBinary(
           path,
           bytes,
           fileOptions: FileOptions(

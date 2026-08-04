@@ -8,10 +8,10 @@ class MseSyncService {
 
   // Helper for fetching HTML (Direct on Mobile, Proxy on Web)
   Future<String> _fetchHtml(String rawUrl) async {
-    final url = kIsWeb 
-      ? Uri.parse('https://corsproxy.io/?${Uri.encodeComponent(rawUrl)}')
-      : Uri.parse(rawUrl);
-    
+    final url = kIsWeb
+        ? Uri.parse('https://corsproxy.io/?${Uri.encodeComponent(rawUrl)}')
+        : Uri.parse(rawUrl);
+
     final response = await http.get(url).timeout(const Duration(seconds: 30));
     if (response.statusCode != 200) throw 'Error ${response.statusCode}';
     return response.body;
@@ -33,8 +33,10 @@ class MseSyncService {
 
       stocks.add({
         'symbol': cols[0].text.trim().toUpperCase(),
-        'price': double.tryParse(cols[2].text.replaceAll(',', '').trim()) ?? 0.0,
-        'change_percent': double.tryParse(cols[3].text.replaceAll('%', '').trim()) ?? 0.0,
+        'price':
+            double.tryParse(cols[2].text.replaceAll(',', '').trim()) ?? 0.0,
+        'change_percent':
+            double.tryParse(cols[3].text.replaceAll('%', '').trim()) ?? 0.0,
         'volume': int.tryParse(cols[4].text.replaceAll(',', '').trim()) ?? 0,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       });
@@ -48,9 +50,11 @@ class MseSyncService {
 
   // 2. SYNC NEWS (From Nyasa Times Business - High Success Rate)
   Future<int> syncNews() async {
-    final htmlBody = await _fetchHtml('https://www.nyasatimes.com/category/business/');
+    final htmlBody = await _fetchHtml(
+      'https://www.nyasatimes.com/category/business/',
+    );
     final document = parser.parse(htmlBody);
-    
+
     List<Map<String, dynamic>> newsItems = [];
     // Nyasa Times uses 'card-title' or 'h3' for news headers
     final articles = document.querySelectorAll('h3.entry-title a');
@@ -58,7 +62,7 @@ class MseSyncService {
     for (var a in articles) {
       final title = a.text.trim();
       final link = a.attributes['href'] ?? '';
-      
+
       if (title.length > 10 && link.isNotEmpty) {
         newsItems.add({
           'title': title,

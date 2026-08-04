@@ -7,9 +7,11 @@ import 'package:mse_market_connect/core/theme/app_theme.dart';
 import 'package:mse_market_connect/features/trade/presentation/my_orders_screen.dart';
 import 'package:mse_market_connect/features/trade/presentation/order_detail_screen.dart';
 import 'package:mse_market_connect/shared/models/holding_model.dart';
-import 'package:mse_market_connect/shared/models/trade_order_model.dart';
+
+import 'package:mse_market_connect/shared/widgets/company_logo.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:mse_market_connect/shared/models/trade_order_model.dart';
 
 class PortfolioScreen extends StatefulWidget {
   const PortfolioScreen({super.key});
@@ -217,6 +219,12 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        CompanyLogo(
+                          symbol: h.symbol,
+                          logoUrl: h.logoUrl,
+                          size: 46,
+                        ),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,

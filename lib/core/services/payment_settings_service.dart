@@ -4,9 +4,7 @@ class PaymentSettingsService {
   final SupabaseClient _client = Supabase.instance.client;
 
   Future<String> getPremiumInstructions() async {
-    final rows = await _client
-        .from('payment_settings')
-        .select('key,value');
+    final rows = await _client.from('payment_settings').select('key,value');
 
     final list = (rows as List).cast<Map<String, dynamic>>();
 
