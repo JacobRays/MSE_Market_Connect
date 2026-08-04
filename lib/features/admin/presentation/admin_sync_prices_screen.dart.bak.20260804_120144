@@ -24,11 +24,9 @@ class _AdminSyncPricesScreenState extends State<AdminSyncPricesScreen> {
     try {
       final int count;
       if (kIsWeb) {
-        // Web: call Edge Function (server-side scrape)
-        count = await _edge.syncNow();
+        count = await _edge.syncNow(); // Edge Function path
       } else {
-        // Android/iOS: use native scraper service
-        count = await _prices.syncMainboardPrices();
+        count = await _prices.syncMainboardPrices(); // Mobile (Android/iOS)
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -39,6 +37,14 @@ class _AdminSyncPricesScreenState extends State<AdminSyncPricesScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Price sync failed: $e')),
       );
+    } finally {
+      if (mounted) setState(() => _syncingPrices = false);
+    }
+  } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Price sync failed: $e')));
     } finally {
       if (mounted) setState(() => _syncingPrices = false);
     }
@@ -64,6 +70,8 @@ class _AdminSyncPricesScreenState extends State<AdminSyncPricesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final disabled = false;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Admin Sync')),
       body: ListView(
@@ -71,7 +79,7 @@ class _AdminSyncPricesScreenState extends State<AdminSyncPricesScreen> {
         children: [
           if (kIsWeb)
             Card(
-              color: Colors.green.withOpacity(0.12),
+              color: Colors.green.withValues(alpha: 0.12),
               child: const Padding(
                 padding: EdgeInsets.all(16),
                 child: Text(

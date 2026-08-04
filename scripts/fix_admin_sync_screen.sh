@@ -1,3 +1,14 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+FILE="lib/features/admin/presentation/admin_sync_prices_screen.dart"
+[[ -f "$FILE" ]] || { echo "Missing: $FILE" >&2; exit 1; }
+
+ts="$(date +%Y%m%d_%H%M%S)"
+cp -a "$FILE" "${FILE}.bak.${ts}"
+echo "Backup: ${FILE}.bak.${ts}"
+
+cat > "$FILE" << 'DART'
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mse_market_connect/core/services/mse_price_sync_service.dart';
@@ -115,3 +126,6 @@ class _AdminSyncPricesScreenState extends State<AdminSyncPricesScreen> {
     );
   }
 }
+DART
+
+echo "Patched: $FILE"
