@@ -465,10 +465,11 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                 padding: const EdgeInsets.all(16),
                 itemCount: _orders.length + 2, // filters + items + loader
                 itemBuilder: (context, i) {
-                  if (i == 0)
+                  if (i == 0) {
                     return Column(
                       children: [_filters(), const SizedBox(height: 8)],
                     );
+                  }
                   final idx = i - 1;
                   if (idx < _orders.length) {
                     final o = _orders[idx];

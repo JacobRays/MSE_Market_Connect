@@ -25,8 +25,9 @@ class SubscriptionModel {
   bool get isPremium {
     if (plan != 'premium') return false;
     if (status != 'active') return false;
-    if (currentPeriodEnd == null)
+    if (currentPeriodEnd == null) {
       return true; // treat as active premium until expiry is used
+    }
     return currentPeriodEnd!.isAfter(DateTime.now());
   }
 }

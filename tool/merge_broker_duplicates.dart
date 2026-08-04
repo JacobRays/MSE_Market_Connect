@@ -199,10 +199,12 @@ Future<void> _mergeGroup(SupabaseClient client, _Target t) async {
       }
     }
   }
-  if (phone != (keeper['phone'] ?? '').toString().trim())
+  if (phone != (keeper['phone'] ?? '').toString().trim()) {
     patch['phone'] = phone;
-  if (altPhone != (keeper['alt_phone'] ?? '').toString().trim())
+  }
+  if (altPhone != (keeper['alt_phone'] ?? '').toString().trim()) {
     patch['alt_phone'] = altPhone;
+  }
 
   // Merge address lines (append missing lines only)
   String address = (keeper['address'] ?? '').toString();
@@ -221,8 +223,9 @@ Future<void> _mergeGroup(SupabaseClient client, _Target t) async {
       }
     }
   }
-  if (address != (keeper['address'] ?? '').toString())
+  if (address != (keeper['address'] ?? '').toString()) {
     patch['address'] = address;
+  }
 
   // Apply patch to keeper if anything changed
   if (patch.isNotEmpty) {
