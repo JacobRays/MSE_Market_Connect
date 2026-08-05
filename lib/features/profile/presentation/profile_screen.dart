@@ -219,7 +219,7 @@ class _StatsRow extends StatelessWidget {
     // Replace with actual data from your portfolio/subs if available
     return Row(
       children: [
-        Expanded(child: _StatCard(title: 'Subscription', value: profile?.isPremium == true ? 'Premium' : 'Free')),
+        Expanded(child: _StatCard(title: 'Subscription', value: 'N/A')),
         const SizedBox(width: 12),
         Expanded(child: _StatCard(title: 'Portfolio Value', value: '-')),   // placeholder
         const SizedBox(width: 12),
