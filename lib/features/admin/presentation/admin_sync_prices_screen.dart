@@ -84,7 +84,7 @@ class _AdminSyncPricesScreenState extends State<AdminSyncPricesScreen> {
         children: [
           if (kIsWeb)
             Card(
-              color: Colors.green.withOpacity(0.12),
+              color: Colors.green.withValues(alpha: 0.12),
               child: const Padding(
                 padding: EdgeInsets.all(16),
                 child: Text(

@@ -64,7 +64,7 @@ class MarketStatusService {
       anyMovement = stocks.any((s) => s.changePercent.abs() > 1e-6);
       for (final s in stocks) {
         final t = s.updatedAt;
-        if (t != null && (latest == null || t.isAfter(latest!))) latest = t;
+        if (t != null && (latest == null || t.isAfter(latest))) latest = t;
       }
     }
     // If any stock moved today during window, call it open

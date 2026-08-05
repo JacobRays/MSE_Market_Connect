@@ -4,7 +4,7 @@ import 'package:mse_market_connect/core/theme/app_theme.dart';
 class QuickActionsScreen extends StatelessWidget {
   final List<QuickActionItem> actions;
 
-  const QuickActionsScreen({super.key, required this.actions});
+  const QuickActionsScreen({super.key, this.actions = const []});
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +32,7 @@ class QuickActionItem {
 
 class _QuickActionsGrid extends StatelessWidget {
   final List<QuickActionItem> actions;
-  const _QuickActionsGrid({required this.actions});
+  const _QuickActionsGrid({this.actions = const []});
 
   @override
   Widget build(BuildContext context) {
@@ -71,13 +71,22 @@ class _QuickActionCircle extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          // FLOATING CIRCLE WITH SHADOW
           Container(
             height: 54,
             width: 54,
+            margin: const EdgeInsets.only(bottom: 4),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: bg,
               border: Border.all(color: border),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.15),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: Icon(item.icon, color: iconColor, size: 26),
           ),
