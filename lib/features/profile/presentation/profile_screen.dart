@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:mse_market_connect/core/services/profile_service.dart';
+import 'package:mse_market_connect/core/services/subscription_service.dart';
 import 'package:mse_market_connect/core/theme/app_theme.dart';
 import 'package:mse_market_connect/shared/models/profile_model.dart';
+import 'package:mse_market_connect/features/profile/presentation/edit_profile_screen.dart';
+import 'package:mse_market_connect/features/profile/presentation/change_password_screen.dart';
+import 'package:mse_market_connect/features/profile/presentation/kyc_status_screen.dart';
 import 'package:mse_market_connect/features/profile/presentation/settings_screen.dart';
 import 'package:mse_market_connect/features/profile/presentation/support_screen.dart';
 import 'package:mse_market_connect/features/profile/presentation/upgrade_screen.dart';
@@ -16,7 +20,9 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final ProfileService _profileService = ProfileService();
+  final SubscriptionService _subscriptionService = SubscriptionService();
   ProfileModel? _profile;
+  bool _isPremium = false;
   bool _loading = true;
 
   @override
@@ -27,9 +33,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadProfile() async {
     final p = await _profileService.getCurrentProfile();
+    final sub = await _subscriptionService.getOrCreateMySubscription();
     if (!mounted) return;
     setState(() {
       _profile = p;
+      _isPremium = sub.isPremium;
       _loading = false;
     });
   }
@@ -45,16 +53,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 children: [
-                  // ─── Profile Header Card ─────────────────────
                   _ProfileHeader(profile: _profile),
                   const SizedBox(height: 20),
-                  // ─── Account Stats ───────────────────────────
-                  _StatsRow(profile: _profile),
+                  _StatsRow(isPremium: _isPremium),
                   const SizedBox(height: 24),
-                  // ─── Quick Links / Menu ──────────────────────
-                  const _MenuSection(),
+                  _FeatureList(
+                    profile: _profile,
+                    isPremium: _isPremium,
+                    onProfileUpdated: () => _loadProfile(),
+                  ),
                   const SizedBox(height: 16),
-                  // ─── Logout Button ───────────────────────────
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
@@ -98,7 +106,6 @@ class _ProfileHeader extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: Row(
           children: [
-            // Avatar
             CircleAvatar(
               radius: 36,
               backgroundColor: AppTheme.primaryColor.withOpacity(0.15),
@@ -112,7 +119,6 @@ class _ProfileHeader extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 18),
-            // Name, email, role
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -211,19 +217,24 @@ class _KYCStatusBadge extends StatelessWidget {
 
 // ─── Stats Row ──────────────────────────────────────────────
 class _StatsRow extends StatelessWidget {
-  final ProfileModel? profile;
-  const _StatsRow({required this.profile});
+  final bool isPremium;
+  const _StatsRow({required this.isPremium});
 
   @override
   Widget build(BuildContext context) {
-    // Replace with actual data from your portfolio/subs if available
     return Row(
       children: [
-        Expanded(child: _StatCard(title: 'Subscription', value: 'N/A')),
+        Expanded(
+          child: _StatCard(
+            title: 'Subscription',
+            value: isPremium ? 'Premium' : 'Free',
+            icon: Icons.workspace_premium,
+          ),
+        ),
         const SizedBox(width: 12),
-        Expanded(child: _StatCard(title: 'Portfolio Value', value: '-')),   // placeholder
+        Expanded(child: _StatCard(title: 'Portfolio Value', value: '-', icon: Icons.account_balance_wallet)),
         const SizedBox(width: 12),
-        Expanded(child: _StatCard(title: 'Orders', value: '-')),           // placeholder
+        Expanded(child: _StatCard(title: 'Orders', value: '-', icon: Icons.receipt_long)),
       ],
     );
   }
@@ -232,7 +243,12 @@ class _StatsRow extends StatelessWidget {
 class _StatCard extends StatelessWidget {
   final String title;
   final String value;
-  const _StatCard({required this.title, required this.value});
+  final IconData icon;
+  const _StatCard({
+    required this.title,
+    required this.value,
+    required this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -243,6 +259,8 @@ class _StatCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
         child: Column(
           children: [
+            Icon(icon, color: AppTheme.primaryColor, size: 24),
+            const SizedBox(height: 8),
             Text(
               value,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -265,71 +283,165 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-// ─── Menu / Quick Links ─────────────────────────────────────
-class _MenuSection extends StatelessWidget {
-  const _MenuSection();
+// ─── Feature List ────────────────────────────────────────────
+class _FeatureList extends StatelessWidget {
+  final ProfileModel? profile;
+  final bool isPremium;
+  final VoidCallback onProfileUpdated;
+
+  const _FeatureList({
+    required this.profile,
+    required this.isPremium,
+    required this.onProfileUpdated,
+  });
 
   @override
   Widget build(BuildContext context) {
+    if (profile == null) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _MenuTile(
-          icon: Icons.workspace_premium,
-          title: 'Upgrade to Premium',
-          subtitle: 'Unlock advanced features and unlimited alerts',
-          screen: UpgradeScreen(),
+        Text(
+          'Account',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: Colors.grey[600],
+          ),
+        ),
+        const SizedBox(height: 8),
+        _FeatureTile(
+          icon: Icons.person,
+          title: 'Edit Profile',
+          subtitle: 'Name, email, phone number',
+          onTap: () async {
+            final changed = await Navigator.of(context).push<bool>(
+              MaterialPageRoute(
+                builder: (_) => EditProfileScreen(profile: profile!),
+              ),
+            );
+            if (changed == true) onProfileUpdated();
+          },
+        ),
+        _FeatureTile(
+          icon: Icons.lock,
+          title: 'Change Password',
+          subtitle: 'Update your login password',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ChangePasswordScreen()),
+          ),
+        ),
+        _FeatureTile(
+          icon: Icons.verified_user,
+          title: 'KYC Status',
+          subtitle: 'View your verification status',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => KycStatusScreen(kycStatus: profile!.kycStatus ?? 'pending'),
+            ),
+          ),
         ),
         const Divider(),
-        const _MenuTile(
+        Text(
+          'Premium',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: Colors.grey[600],
+          ),
+        ),
+        const SizedBox(height: 8),
+        _FeatureTile(
+          icon: Icons.workspace_premium,
+          title: isPremium ? 'Manage Subscription' : 'Upgrade to Premium',
+          subtitle: isPremium
+              ? 'View or cancel your plan'
+              : 'Unlock advanced features',
+          onTap: () async {
+            await Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const UpgradeScreen()),
+            );
+            onProfileUpdated(); // refresh premium status
+          },
+        ),
+        const Divider(),
+        Text(
+          'Preferences',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: Colors.grey[600],
+          ),
+        ),
+        const SizedBox(height: 8),
+        _FeatureTile(
+          icon: Icons.notifications,
+          title: 'Notifications',
+          subtitle: 'Price alerts, push notifications',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const SettingsScreen()),
+          ),
+        ),
+        _FeatureTile(
           icon: Icons.settings,
           title: 'Settings',
-          subtitle: 'App preferences, notifications, appearance',
-          screen: SettingsScreen(),
+          subtitle: 'App preferences, theme, etc.',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const SettingsScreen()),
+          ),
         ),
         const Divider(),
-        const _MenuTile(
+        Text(
+          'Support',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: Colors.grey[600],
+          ),
+        ),
+        const SizedBox(height: 8),
+        _FeatureTile(
           icon: Icons.support_agent,
           title: 'Help & Support',
-          subtitle: 'FAQs, contact us, report a problem',
-          screen: SupportScreen(),
+          subtitle: 'FAQs, contact us',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const SupportScreen()),
+          ),
         ),
-        // Add more tiles if needed (e.g., Edit Profile)
       ],
     );
   }
 }
 
-class _MenuTile extends StatelessWidget {
+class _FeatureTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final Widget screen;
+  final VoidCallback onTap;
 
-  const _MenuTile({
+  const _FeatureTile({
     required this.icon,
     required this.title,
     required this.subtitle,
-    required this.screen,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: AppTheme.primaryColor.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(12),
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppTheme.primaryColor.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: AppTheme.primaryColor),
         ),
-        child: Icon(icon, color: AppTheme.primaryColor),
-      ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-      subtitle: Text(subtitle),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => screen),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
       ),
     );
   }

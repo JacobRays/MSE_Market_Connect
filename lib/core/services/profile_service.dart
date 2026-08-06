@@ -36,4 +36,13 @@ class ProfileService {
 
     return ProfileModel.fromMap(response);
   }
+  Future<void> updateProfile({String? fullName, String? phone}) async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw Exception("Not logged in");
+    final updates = <String, dynamic>{};
+    if (fullName != null) updates["full_name"] = fullName;
+    if (phone != null) updates["phone"] = phone;
+    if (updates.isEmpty) return;
+    await _client.from("profiles").update(updates).eq("id", user.id);
+  }
 }

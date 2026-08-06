@@ -205,7 +205,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 // ─── Premium banner (unchanged) ────────────────────────────────
 class _PremiumBanner extends StatefulWidget {
   final VoidCallback onTap;
-  const _PremiumBanner({required this.onTap, Key? key}) : super(key: key);
+  const _PremiumBanner({required this.onTap, super.key});
 
   @override
   _PremiumBannerState createState() => _PremiumBannerState();
@@ -254,7 +254,7 @@ class _PremiumBannerState extends State<_PremiumBanner>
                 borderRadius: BorderRadius.circular(50),
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.primaryColor.withOpacity(0.35),
+                    color: AppTheme.primaryColor.withValues(alpha: 0.35),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -300,7 +300,7 @@ class _QuickActionItem {
 
 class _QuickActionsGrid extends StatelessWidget {
   final List<_QuickActionItem> actions;
-  const _QuickActionsGrid({required this.actions, Key? key}) : super(key: key);
+  const _QuickActionsGrid({required this.actions, super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -369,7 +369,7 @@ class _QuickActionsGrid extends StatelessWidget {
 }
 
 class _AdPanel extends StatelessWidget {
-  const _AdPanel({Key? key}) : super(key: key);
+  const _AdPanel({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -398,7 +398,7 @@ class _TickerItem {
 
 // ─── Coloured News Ticker ──────────────────────────────────────
 class _NewsTicker extends StatefulWidget {
-  const _NewsTicker({Key? key}) : super(key: key);
+  const _NewsTicker({super.key});
 
   @override
   _NewsTickerState createState() => _NewsTickerState();
