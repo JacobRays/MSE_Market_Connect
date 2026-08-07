@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mse_market_connect/core/theme/app_theme.dart';
 import 'package:mse_market_connect/core/theme/theme_mode_controller.dart';
+import 'package:mse_market_connect/features/profile/presentation/privacy_policy_screen.dart';
+import 'package:mse_market_connect/features/profile/presentation/terms_of_service_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -88,12 +90,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _tile(
             icon: Icons.policy,
             title: 'Privacy Policy',
-            onTap: () { /* open URL */ },
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
+            ),
           ),
           _tile(
             icon: Icons.gavel,
             title: 'Terms of Service',
-            onTap: () { /* open URL */ },
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const TermsOfServiceScreen()),
+            ),
           ),
         ],
       ),
