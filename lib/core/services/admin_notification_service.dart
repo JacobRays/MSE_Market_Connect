@@ -1,5 +1,4 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:mse_market_connect/shared/models/notification_model.dart';
 
 class AdminNotificationService {
   final SupabaseClient _client = Supabase.instance.client;

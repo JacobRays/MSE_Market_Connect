@@ -154,7 +154,7 @@ class _ProfileHeader extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 36,
-              backgroundColor: AppTheme.primaryColor.withOpacity(0.15),
+              backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.15),
               child: Text(
                 name[0].toUpperCase(),
                 style: const TextStyle(
@@ -209,9 +209,9 @@ class _RoleBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: AppTheme.primaryColor.withOpacity(0.1),
+        color: AppTheme.primaryColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.primaryColor.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.3)),
       ),
       child: Text(
         label,
@@ -245,9 +245,9 @@ class _KYCStatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: _color(status).withOpacity(0.1),
+        color: _color(status).withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _color(status).withOpacity(0.4)),
+        border: Border.all(color: _color(status).withValues(alpha: 0.4)),
       ),
       child: Text(
         'KYC ${status.toUpperCase()}',
@@ -429,7 +429,7 @@ class _FeatureTile extends StatelessWidget {
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withOpacity(0.08),
+            color: AppTheme.primaryColor.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(icon, color: AppTheme.primaryColor),

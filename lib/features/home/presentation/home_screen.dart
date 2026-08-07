@@ -14,7 +14,6 @@ import 'package:mse_market_connect/features/profile/presentation/settings_screen
 import 'package:mse_market_connect/features/profile/presentation/support_screen.dart';
 import 'package:mse_market_connect/features/profile/presentation/upgrade_screen.dart';
 import 'package:mse_market_connect/features/trade/presentation/my_orders_screen.dart';
-import 'package:mse_market_connect/features/home/presentation/quick_actions_screen.dart';
 import 'package:mse_market_connect/features/home/presentation/widgets/ad_carousel.dart';
 import 'package:mse_market_connect/shared/models/ad_model.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';

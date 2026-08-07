@@ -27,8 +27,11 @@ class _KycStatusScreenState extends State<KycStatusScreen> {
     final picked = await _picker.pickImage(source: ImageSource.gallery);
     if (picked != null) {
       setState(() {
-        if (isFront) _frontImage = File(picked.path);
-        else _backImage = File(picked.path);
+        if (isFront) {
+          _frontImage = File(picked.path);
+        } else {
+          _backImage = File(picked.path);
+        }
       });
     }
   }
@@ -44,24 +47,22 @@ class _KycStatusScreenState extends State<KycStatusScreen> {
     setState(() => _submitting = true);
     try {
       final userId = widget.profile.id;
-      // Upload images to Supabase Storage (bucket: kyc_docs)
       final storage = Supabase.instance.client.storage;
       await storage.from('kyc_docs').upload(
-        '${userId}/front.jpg', _frontImage!,
+        '$userId/front.jpg', _frontImage!,
         fileOptions: const FileOptions(upsert: true),
       );
       await storage.from('kyc_docs').upload(
-        '${userId}/back.jpg', _backImage!,
+        '$userId/back.jpg', _backImage!,
         fileOptions: const FileOptions(upsert: true),
       );
-      // Update profile with KYC data
       await Supabase.instance.client.from('profiles').update({
         'kyc_status': 'pending',
         'kyc_details': {
           'id_type': _selectedIdType,
           'id_number': _idNumberCtrl.text.trim(),
-          'front_url': '${userId}/front.jpg',
-          'back_url': '${userId}/back.jpg',
+          'front_url': '$userId/front.jpg',
+          'back_url': '$userId/back.jpg',
         },
       }).eq('id', userId);
       if (!mounted) return;
@@ -81,8 +82,10 @@ class _KycStatusScreenState extends State<KycStatusScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final status = widget.profile.kycStatus?.toLowerCase() ?? 'pending';
+    final kyc = widget.profile.kycStatus;
+    final status = (kyc ?? 'pending').toLowerCase();
     final alreadySubmitted = status == 'pending' || status == 'approved' || status == 'rejected';
+
     return Scaffold(
       appBar: AppBar(title: const Text('KYC Verification')),
       body: SingleChildScrollView(
@@ -97,10 +100,10 @@ class _KycStatusScreenState extends State<KycStatusScreen> {
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: status == 'approved'
-                        ? AppTheme.gainColor.withOpacity(0.1)
+                        ? AppTheme.gainColor.withValues(alpha: 0.1)
                         : status == 'rejected'
-                            ? AppTheme.lossColor.withOpacity(0.1)
-                            : Colors.orange.withOpacity(0.1),
+                            ? AppTheme.lossColor.withValues(alpha: 0.1)
+                            : Colors.orange.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
@@ -126,7 +129,7 @@ class _KycStatusScreenState extends State<KycStatusScreen> {
               Text('ID Type', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _selectedIdType,
+                initialValue: _selectedIdType,
                 decoration: const InputDecoration(border: OutlineInputBorder()),
                 items: const [
                   DropdownMenuItem(value: 'national_id', child: Text('National ID')),
