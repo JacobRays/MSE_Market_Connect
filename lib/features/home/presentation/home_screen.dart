@@ -205,7 +205,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 // ─── Premium banner (unchanged) ────────────────────────────────
 class _PremiumBanner extends StatefulWidget {
   final VoidCallback onTap;
-  const _PremiumBanner({required this.onTap, super.key});
+  const _PremiumBanner({required this.onTap});
 
   @override
   _PremiumBannerState createState() => _PremiumBannerState();

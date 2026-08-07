@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:mse_market_connect/core/services/admin_notification_service.dart';
 import 'package:mse_market_connect/core/services/notification_service.dart';
+import 'package:mse_market_connect/core/theme/app_theme.dart';
 import 'package:mse_market_connect/shared/models/notification_model.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -11,241 +13,180 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
-  final _service = NotificationService();
-  late Future<List<NotificationModel>> _future;
-  RealtimeChannel? _channel;
+  final NotificationService _notifService = NotificationService();
+  final AdminNotificationService _adminService = AdminNotificationService();
+  bool _isAdmin = false;
+  late Future<List<AppNotificationModel>> _userNotifications;
 
   @override
   void initState() {
     super.initState();
-    _future = _service.getMyNotifications();
-    _listenRealtime();
+    _checkAdmin();
   }
 
-  void _listenRealtime() {
+  Future<void> _checkAdmin() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
-
-    _channel = Supabase.instance.client
-        .channel('notifications-live')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'notifications',
-          callback: (payload) async {
-            final newRow = payload.newRecord;
-            if (newRow['user_id'] == user.id) {
-              await _refresh(silent: true);
-            }
-          },
-        )
-        .subscribe();
-  }
-
-  @override
-  void dispose() {
-    if (_channel != null) {
-      Supabase.instance.client.removeChannel(_channel!);
-    }
-    super.dispose();
-  }
-
-  Future<void> _refresh({bool silent = false}) async {
-    setState(() => _future = _service.getMyNotifications());
-    await _future;
-
-    if (!silent && mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Notifications refreshed')));
-    }
-  }
-
-  Future<bool> _confirm(String title, String message) async {
-    final res = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-    return res ?? false;
-  }
-
-  Future<void> _deleteOne(NotificationModel n) async {
-    await _service.deleteNotification(n.id);
-    await _refresh(silent: true);
+    final profile = await Supabase.instance.client
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
+    final admin = (profile?['role'] ?? '') == 'admin';
+    if (!mounted) return;
+    setState(() {
+      _isAdmin = admin;
+      _userNotifications = _notifService.getMyNotifications();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Notifications'),
-        actions: [
-          PopupMenuButton<String>(
-            onSelected: (v) async {
-              if (v == 'read') {
-                await _service.markAllAsRead();
-                await _refresh(silent: true);
-              } else if (v == 'clear') {
-                final ok = await _confirm(
-                  'Clear all notifications?',
-                  'This cannot be undone.',
-                );
-                if (!ok) return;
-                await _service.clearAll();
-                await _refresh(silent: true);
-              }
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'read', child: Text('Mark all read')),
-              PopupMenuItem(value: 'clear', child: Text('Clear all')),
+      appBar: AppBar(title: Text(_isAdmin ? 'Admin Panel' : 'Notifications')),
+      body: _isAdmin ? _AdminPanel() : _UserNotifications(notifications: _userNotifications),
+    );
+  }
+}
+
+class _UserNotifications extends StatelessWidget {
+  final Future<List<AppNotificationModel>> notifications;
+  const _UserNotifications({required this.notifications});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<AppNotificationModel>>(
+      future: notifications,
+      builder: (ctx, snap) {
+        if (snap.connectionState == ConnectionState.waiting)
+          return const Center(child: CircularProgressIndicator());
+        if (snap.hasError)
+          return Center(child: Text('Error: ${snap.error}'));
+        final list = snap.data ?? [];
+        if (list.isEmpty)
+          return const Center(child: Text('No notifications yet'));
+        return ListView.builder(
+          itemCount: list.length,
+          itemBuilder: (_, i) => ListTile(
+            title: Text(list[i].title),
+            subtitle: Text(list[i].body),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _AdminPanel extends StatefulWidget {
+  @override
+  _AdminPanelState createState() => _AdminPanelState();
+}
+
+class _AdminPanelState extends State<_AdminPanel> {
+  final AdminNotificationService _admin = AdminNotificationService();
+  final TextEditingController _titleCtrl = TextEditingController();
+  final TextEditingController _bodyCtrl = TextEditingController();
+  late Future<List<Map<String, dynamic>>> _pendingKyc;
+
+  @override
+  void initState() {
+    super.initState();
+    _pendingKyc = _admin.getPendingKyc();
+  }
+
+  Future<void> _sendNotification() async {
+    await _admin.sendToAll(_titleCtrl.text, _bodyCtrl.text);
+    _titleCtrl.clear();
+    _bodyCtrl.clear();
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Notification sent!')));
+  }
+
+  Future<void> _refreshKyc() => setState(() => _pendingKyc = _admin.getPendingKyc());
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          const TabBar(
+            tabs: [
+              Tab(text: 'Send Notification'),
+              Tab(text: 'KYC Approvals'),
             ],
           ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                // Send Notification tab
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      TextField(controller: _titleCtrl, decoration: const InputDecoration(labelText: 'Title')),
+                      const SizedBox(height: 12),
+                      TextField(controller: _bodyCtrl, decoration: const InputDecoration(labelText: 'Body'), maxLines: 4),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _sendNotification,
+                        child: const Text('Send to All Users'),
+                      ),
+                    ],
+                  ),
+                ),
+                // KYC Approvals tab
+                RefreshIndicator(
+                  onRefresh: _refreshKyc,
+                  child: FutureBuilder<List<Map<String, dynamic>>>(
+                    future: _pendingKyc,
+                    builder: (ctx, snap) {
+                      if (snap.connectionState == ConnectionState.waiting)
+                        return const Center(child: CircularProgressIndicator());
+                      if (snap.hasError)
+                        return Center(child: Text('Error: ${snap.error}'));
+                      final list = snap.data ?? [];
+                      if (list.isEmpty)
+                        return const Center(child: Text('No pending verifications'));
+                      return ListView.builder(
+                        itemCount: list.length,
+                        itemBuilder: (_, i) {
+                          final item = list[i];
+                          return Card(
+                            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            child: ListTile(
+                              title: Text(item['full_name'] ?? ''),
+                              subtitle: Text(item['email'] ?? ''),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.check, color: AppTheme.gainColor),
+                                    onPressed: () async {
+                                      await _admin.approveKyc(item['id']);
+                                      _refreshKyc();
+                                    },
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.close, color: AppTheme.lossColor),
+                                    onPressed: () async {
+                                      await _admin.rejectKyc(item['id']);
+                                      _refreshKyc();
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: () => _refresh(),
-        child: FutureBuilder<List<NotificationModel>>(
-          future: _future,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            if (snapshot.hasError) {
-              return ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                children: [
-                  Text('Failed to load notifications.\n${snapshot.error}'),
-                ],
-              );
-            }
-
-            final items = snapshot.data ?? [];
-            if (items.isEmpty) {
-              return ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                children: const [
-                  SizedBox(height: 40),
-                  Icon(Icons.notifications_none, size: 64),
-                  SizedBox(height: 12),
-                  Center(child: Text('No notifications yet.')),
-                ],
-              );
-            }
-
-            return ListView.separated(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
-              itemCount: items.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final n = items[index];
-
-                return Dismissible(
-                  key: ValueKey(n.id),
-                  direction: DismissDirection.endToStart,
-                  confirmDismiss: (_) => _confirm(
-                    'Delete notification?',
-                    'This will remove it from your list.',
-                  ),
-                  onDismissed: (_) async {
-                    try {
-                      await _deleteOne(n);
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Notification deleted')),
-                      );
-                    } catch (e) {
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Delete failed: $e')),
-                      );
-                      await _refresh(silent: true);
-                    }
-                  },
-                  background: Container(
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade600,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.delete_outline,
-                      color: Colors.white,
-                    ),
-                  ),
-                  child: Card(
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.all(16),
-                      leading: Icon(
-                        n.isRead
-                            ? Icons.notifications
-                            : Icons.notifications_active,
-                      ),
-                      title: Text(
-                        n.title,
-                        style: n.isRead
-                            ? null
-                            : const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      subtitle: Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(n.body),
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (!n.isRead) const Icon(Icons.circle, size: 10),
-                          const SizedBox(width: 10),
-                          IconButton(
-                            tooltip: 'Delete',
-                            onPressed: () async {
-                              final ok = await _confirm(
-                                'Delete notification?',
-                                'This will remove it from your list.',
-                              );
-                              if (!ok) return;
-                              await _deleteOne(n);
-                              if (!mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Notification deleted'),
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.delete_outline),
-                          ),
-                        ],
-                      ),
-                      onTap: () async {
-                        if (!n.isRead) {
-                          await _service.markAsRead(n.id);
-                          await _refresh(silent: true);
-                        }
-                      },
-                    ),
-                  ),
-                );
-              },
-            );
-          },
-        ),
       ),
     );
   }

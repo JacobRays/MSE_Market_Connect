@@ -42,6 +42,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
+  Future<void> _deleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Account'),
+        content: const Text('This action is irreversible. All data will be permanently deleted.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.lossColor),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        await Supabase.instance.client.from('profiles').delete().eq('id', user.id);
+        await Supabase.instance.client.auth.admin.deleteUser(user.id);
+        await Supabase.instance.client.auth.signOut();
+        if (!mounted) return;
+        Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -61,6 +93,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     profile: _profile,
                     isPremium: _isPremium,
                     onProfileUpdated: () => _loadProfile(),
+                  ),
+                  const SizedBox(height: 24),
+                  // Delete account button
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _deleteAccount,
+                      icon: const Icon(Icons.delete_forever),
+                      label: const Text('Delete Account'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.lossColor,
+                        side: const BorderSide(color: AppTheme.lossColor),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
@@ -87,7 +133,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-// ─── Profile Header ─────────────────────────────────────────
+// ─── Profile Header (unchanged) ──
 class _ProfileHeader extends StatelessWidget {
   final ProfileModel? profile;
   const _ProfileHeader({required this.profile});
@@ -215,7 +261,6 @@ class _KYCStatusBadge extends StatelessWidget {
   }
 }
 
-// ─── Stats Row ──────────────────────────────────────────────
 class _StatsRow extends StatelessWidget {
   final bool isPremium;
   const _StatsRow({required this.isPremium});
@@ -244,11 +289,7 @@ class _StatCard extends StatelessWidget {
   final String title;
   final String value;
   final IconData icon;
-  const _StatCard({
-    required this.title,
-    required this.value,
-    required this.icon,
-  });
+  const _StatCard({required this.title, required this.value, required this.icon});
 
   @override
   Widget build(BuildContext context) {
@@ -283,7 +324,6 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-// ─── Feature List ────────────────────────────────────────────
 class _FeatureList extends StatelessWidget {
   final ProfileModel? profile;
   final bool isPremium;
@@ -301,13 +341,7 @@ class _FeatureList extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Account',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: Colors.grey[600],
-          ),
-        ),
+        Text('Account', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700, color: Colors.grey[600])),
         const SizedBox(height: 8),
         _FeatureTile(
           icon: Icons.person,
@@ -315,9 +349,7 @@ class _FeatureList extends StatelessWidget {
           subtitle: 'Name, email, phone number',
           onTap: () async {
             final changed = await Navigator.of(context).push<bool>(
-              MaterialPageRoute(
-                builder: (_) => EditProfileScreen(profile: profile!),
-              ),
+              MaterialPageRoute(builder: (_) => EditProfileScreen(profile: profile!)),
             );
             if (changed == true) onProfileUpdated();
           },
@@ -326,83 +358,52 @@ class _FeatureList extends StatelessWidget {
           icon: Icons.lock,
           title: 'Change Password',
           subtitle: 'Update your login password',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const ChangePasswordScreen()),
-          ),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ChangePasswordScreen())),
         ),
         _FeatureTile(
           icon: Icons.verified_user,
           title: 'KYC Status',
-          subtitle: 'View your verification status',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => KycStatusScreen(kycStatus: profile!.kycStatus ?? 'pending'),
-            ),
-          ),
+          subtitle: 'View / update your verification',
+          onTap: () async {
+            await Navigator.of(context).push(MaterialPageRoute(builder: (_) => KycStatusScreen(profile: profile!)));
+            onProfileUpdated(); // refresh after possible submission
+          },
         ),
         const Divider(),
-        Text(
-          'Premium',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: Colors.grey[600],
-          ),
-        ),
+        Text('Premium', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700, color: Colors.grey[600])),
         const SizedBox(height: 8),
         _FeatureTile(
           icon: Icons.workspace_premium,
           title: isPremium ? 'Manage Subscription' : 'Upgrade to Premium',
-          subtitle: isPremium
-              ? 'View or cancel your plan'
-              : 'Unlock advanced features',
+          subtitle: isPremium ? 'View or cancel your plan' : 'Unlock advanced features',
           onTap: () async {
-            await Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const UpgradeScreen()),
-            );
-            onProfileUpdated(); // refresh premium status
+            await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const UpgradeScreen()));
+            onProfileUpdated();
           },
         ),
         const Divider(),
-        Text(
-          'Preferences',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: Colors.grey[600],
-          ),
-        ),
+        Text('Preferences', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700, color: Colors.grey[600])),
         const SizedBox(height: 8),
         _FeatureTile(
           icon: Icons.notifications,
           title: 'Notifications',
           subtitle: 'Price alerts, push notifications',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const SettingsScreen()),
-          ),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
         ),
         _FeatureTile(
           icon: Icons.settings,
           title: 'Settings',
           subtitle: 'App preferences, theme, etc.',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const SettingsScreen()),
-          ),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
         ),
         const Divider(),
-        Text(
-          'Support',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: Colors.grey[600],
-          ),
-        ),
+        Text('Support', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700, color: Colors.grey[600])),
         const SizedBox(height: 8),
         _FeatureTile(
           icon: Icons.support_agent,
           title: 'Help & Support',
           subtitle: 'FAQs, contact us',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const SupportScreen()),
-          ),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SupportScreen())),
         ),
       ],
     );
@@ -415,12 +416,7 @@ class _FeatureTile extends StatelessWidget {
   final String subtitle;
   final VoidCallback onTap;
 
-  const _FeatureTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
+  const _FeatureTile({required this.icon, required this.title, required this.subtitle, required this.onTap});
 
   @override
   Widget build(BuildContext context) {

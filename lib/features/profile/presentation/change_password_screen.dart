@@ -11,14 +11,16 @@ class ChangePasswordScreen extends StatefulWidget {
 
 class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _newPasswordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
+  final _oldPasswordCtrl = TextEditingController();
+  final _newPasswordCtrl = TextEditingController();
+  final _confirmPasswordCtrl = TextEditingController();
   bool _saving = false;
 
   @override
   void dispose() {
-    _newPasswordController.dispose();
-    _confirmPasswordController.dispose();
+    _oldPasswordCtrl.dispose();
+    _newPasswordCtrl.dispose();
+    _confirmPasswordCtrl.dispose();
     super.dispose();
   }
 
@@ -26,8 +28,17 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     try {
-      await Supabase.instance.client.auth.updateUser(
-        UserAttributes(password: _newPasswordController.text.trim()),
+      final client = Supabase.instance.client;
+      final user = client.auth.currentUser;
+      if (user == null) throw Exception('Not logged in');
+      // Verify old password by signing in again
+      await client.auth.signInWithPassword(
+        email: user.email!,
+        password: _oldPasswordCtrl.text,
+      );
+      // Update password
+      await client.auth.updateUser(
+        UserAttributes(password: _newPasswordCtrl.text),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -37,7 +48,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed: ${e.toString()}')),
+        SnackBar(content: Text('Error. Check old password. ${e.toString().split('\n').first}')),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -55,25 +66,24 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
           child: Column(
             children: [
               TextFormField(
-                controller: _newPasswordController,
+                controller: _oldPasswordCtrl,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'New Password',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) =>
-                    (v?.length ?? 0) < 6 ? 'Minimum 6 characters' : null,
+                decoration: const InputDecoration(labelText: 'Current Password', border: OutlineInputBorder()),
+                validator: (v) => (v?.isEmpty ?? true) ? 'Required' : null,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               TextFormField(
-                controller: _confirmPasswordController,
+                controller: _newPasswordCtrl,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Confirm New Password',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) =>
-                    v != _newPasswordController.text ? 'Passwords do not match' : null,
+                decoration: const InputDecoration(labelText: 'New Password', border: OutlineInputBorder()),
+                validator: (v) => (v?.length ?? 0) < 6 ? 'Min 6 characters' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _confirmPasswordCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Confirm New Password', border: OutlineInputBorder()),
+                validator: (v) => v != _newPasswordCtrl.text ? 'Passwords do not match' : null,
               ),
               const SizedBox(height: 24),
               SizedBox(
