@@ -357,19 +357,19 @@ class _SupportScreenState extends State<SupportScreen> {
                     ListTile(
                       leading: const Icon(Icons.email, color: AppTheme.primaryColor),
                       title: const Text('Email'),
-                      subtitle: const Text('support@premiumrays.mw'),
+                      subtitle: const Text('premiumrays01@gmail.com'),
                     ),
                     const Divider(),
                     ListTile(
                       leading: const Icon(Icons.phone, color: AppTheme.primaryColor),
                       title: const Text('Phone'),
-                      subtitle: const Text('+265 888 123 456'),
+                      subtitle: const Text('+265885472861'),
                     ),
                     const Divider(),
                     ListTile(
                       leading: const Icon(Icons.location_on, color: AppTheme.primaryColor),
                       title: const Text('Office'),
-                      subtitle: const Text('Blantyre, Malawi'),
+                      subtitle: const Text('Lilongwe, Malawi'),
                     ),
                   ],
                 ),
