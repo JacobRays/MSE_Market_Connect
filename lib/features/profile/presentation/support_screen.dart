@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mse_market_connect/core/services/support_service.dart';
+import 'package:mse_market_connect/core/theme/app_theme.dart';
 
 class SupportScreen extends StatefulWidget {
   const SupportScreen({super.key});
@@ -17,19 +18,26 @@ class _SupportScreenState extends State<SupportScreen> {
   String? _deletingId;
   late Future<List<Map<String, dynamic>>> _ticketsFuture;
 
-  final List<Map<String, String>> _faqs = const [
+  final List<Map<String, dynamic>> _faqs = const [
     {
       'q': 'What are MSE trading hours?',
-      'a': 'Trading happens Monday to Friday from 9:00 AM to 3:00 PM.',
+      'a': 'Trading happens Monday–Friday from 9:00 AM to 3:00 PM.',
+      'icon': Icons.access_time,
     },
     {
       'q': 'How long does settlement take?',
       'a': 'Standard MSE settlement is T+3 (3 business days after trade).',
+      'icon': Icons.timer,
     },
     {
       'q': 'What are the fees?',
-      'a':
-          'Fees depend on your broker. Check the Broker list for indicative rates.',
+      'a': 'Fees depend on your broker. Check the Broker list for indicative rates.',
+      'icon': Icons.monetization_on,
+    },
+    {
+      'q': 'How do I reset my password?',
+      'a': 'Go to Profile → Change Password. Enter your old and new password.',
+      'icon': Icons.lock,
     },
   ];
 
@@ -64,73 +72,91 @@ class _SupportScreenState extends State<SupportScreen> {
       _subject.clear();
       _message.clear();
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Ticket sent to support')));
-
-      // fire-and-forget refresh
-      // ignore: discarded_futures
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ticket sent successfully')),
+      );
       _reloadTickets();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error sending ticket: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sending ticket: $e')),
+      );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
   Future<void> _confirmDeleteTicket(String id) async {
-    final ok =
-        await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Delete ticket?'),
-            content: const Text('This will remove the ticket from your list.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Delete'),
-              ),
-            ],
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete ticket?'),
+        content: const Text('This will remove the ticket from your list.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
           ),
-        ) ??
-        false;
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
 
-    if (!ok) return;
+    if (ok != true) return;
 
     setState(() => _deletingId = id);
     try {
       await _service.deleteTicket(id);
       if (!mounted) return;
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Ticket deleted')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ticket deleted')),
+      );
       await _reloadTickets();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error deleting ticket: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error deleting ticket: $e')),
+      );
     } finally {
       if (mounted) setState(() => _deletingId = null);
     }
   }
 
-  String _formatWhen(BuildContext context, String createdAt) {
-    final dt = DateTime.tryParse(createdAt)?.toLocal();
-    if (dt == null) return createdAt;
-
+  String _formatDate(String iso) {
+    final dt = DateTime.tryParse(iso)?.toLocal();
+    if (dt == null) return iso;
     final loc = MaterialLocalizations.of(context);
-    final date = loc.formatShortDate(dt);
-    final time = loc.formatTimeOfDay(TimeOfDay.fromDateTime(dt));
-    return '$date • $time';
+    return '${loc.formatShortDate(dt)} • ${loc.formatTimeOfDay(TimeOfDay.fromDateTime(dt))}';
+  }
+
+  Widget _statusBadge(String status) {
+    final upper = status.toUpperCase();
+    Color color;
+    switch (status.toLowerCase()) {
+      case 'open':
+        color = Colors.orange;
+        break;
+      case 'closed':
+        color = AppTheme.gainColor;
+        break;
+      default:
+        color = Colors.grey;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.5)),
+      ),
+      child: Text(
+        upper,
+        style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700),
+      ),
+    );
   }
 
   @override
@@ -142,39 +168,40 @@ class _SupportScreenState extends State<SupportScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Text(
-              'MY TICKETS',
-              style: Theme.of(
-                context,
-              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 10),
+            // ─── Tickets Section ─────────────────
+            _sectionTitle(context, 'MY TICKETS'),
+            const SizedBox(height: 8),
             FutureBuilder<List<Map<String, dynamic>>>(
               future: _ticketsFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
+              builder: (ctx, snap) {
+                if (snap.connectionState != ConnectionState.done) {
                   return const Padding(
-                    padding: EdgeInsets.all(16),
+                    padding: EdgeInsets.all(32),
                     child: Center(child: CircularProgressIndicator()),
                   );
                 }
-                if (snapshot.hasError) {
+
+                if (snap.hasError) {
                   return Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
-                      child: Text('Failed to load tickets:\n${snapshot.error}'),
+                      child: Text('Failed to load tickets:\n${snap.error}'),
                     ),
                   );
                 }
 
-                final tickets = snapshot.data ?? [];
+                final tickets = snap.data ?? [];
                 if (tickets.isEmpty) {
                   return Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        'No tickets yet.\nIf you need help, create one below.',
-                        style: Theme.of(context).textTheme.bodyMedium,
+                    color: Colors.grey[50],
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: Column(
+                        children: [
+                          Icon(Icons.inbox, size: 48, color: Colors.grey),
+                          SizedBox(height: 12),
+                          Text('No tickets yet.\nCreate one below if you need help.'),
+                        ],
                       ),
                     ),
                   );
@@ -182,27 +209,37 @@ class _SupportScreenState extends State<SupportScreen> {
 
                 return Column(
                   children: tickets.map((t) {
-                    final id = (t['id'] ?? '').toString();
-                    final subject = (t['subject'] ?? '').toString();
-                    final status = (t['status'] ?? 'open').toString();
-                    final createdAt = (t['created_at'] ?? '').toString();
-                    final message = (t['message'] ?? '').toString();
+                    final id = t['id']?.toString() ?? '';
+                    final subject = t['subject']?.toString() ?? '';
+                    final status = t['status']?.toString() ?? 'open';
+                    final createdAt = t['created_at']?.toString() ?? '';
+                    final message = t['message']?.toString() ?? '';
 
                     return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       child: ExpansionTile(
-                        title: Text(
-                          subject,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        subtitle: Text(
-                          '${status.toUpperCase()} • ${_formatWhen(context, createdAt)}',
+                        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        leading: const Icon(Icons.support_agent, color: AppTheme.primaryColor),
+                        title: Text(subject, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        subtitle: Row(
+                          children: [
+                            _statusBadge(status),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _formatDate(createdAt),
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          ],
                         ),
                         children: [
                           Padding(
                             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                             child: Align(
                               alignment: Alignment.centerLeft,
-                              child: Text(message),
+                              child: Text(message, style: const TextStyle(fontSize: 14)),
                             ),
                           ),
                           Align(
@@ -215,15 +252,10 @@ class _SupportScreenState extends State<SupportScreen> {
                                   ? const SizedBox(
                                       height: 16,
                                       width: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
+                                      child: CircularProgressIndicator(strokeWidth: 2),
                                     )
                                   : const Icon(Icons.delete_outline, size: 18),
-                              label: const Text(
-                                'Delete',
-                                style: TextStyle(fontSize: 13),
-                              ),
+                              label: const Text('Delete', style: TextStyle(fontSize: 13)),
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -234,90 +266,132 @@ class _SupportScreenState extends State<SupportScreen> {
                 );
               },
             ),
-            const SizedBox(height: 22),
 
-            Text(
-              'FAQ',
-              style: Theme.of(
-                context,
-              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 10),
-            ..._faqs.map(
-              (f) => Card(
-                child: ExpansionTile(
-                  title: Text(
-                    f['q']!,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
+            const SizedBox(height: 24),
+
+            // ─── FAQ Section ─────────────────
+            _sectionTitle(context, 'FAQ'),
+            const SizedBox(height: 8),
+            ..._faqs.map((f) => Card(
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  child: ExpansionTile(
+                    leading: Icon(f['icon'] as IconData, color: AppTheme.primaryColor),
+                    title: Text(f['q'] as String, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(f['a'] as String, style: const TextStyle(fontSize: 14)),
+                      ),
+                    ],
                   ),
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(f['a']!),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+                )),
 
-            const SizedBox(height: 22),
-            Text(
-              'CONTACT SUPPORT',
-              style: Theme.of(
-                context,
-              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 24),
+
+            // ─── Contact Support Form ─────────────────
+            _sectionTitle(context, 'CONTACT SUPPORT'),
+            const SizedBox(height: 8),
             Card(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     TextField(
                       controller: _subject,
-                      decoration: const InputDecoration(labelText: 'Subject'),
+                      decoration: const InputDecoration(
+                        labelText: 'Subject',
+                        prefixIcon: Icon(Icons.title),
+                        border: OutlineInputBorder(),
+                      ),
                       textInputAction: TextInputAction.next,
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _message,
                       maxLines: 4,
-                      decoration: const InputDecoration(labelText: 'Message'),
+                      decoration: const InputDecoration(
+                        labelText: 'Message',
+                        prefixIcon: Icon(Icons.message),
+                        border: OutlineInputBorder(),
+                      ),
                     ),
                     const SizedBox(height: 16),
                     SizedBox(
                       width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
+                      height: 48,
+                      child: ElevatedButton.icon(
                         onPressed: _submitting ? null : _send,
-                        child: _submitting
+                        icon: _submitting
                             ? const SizedBox(
                                 height: 18,
                                 width: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                               )
-                            : const Text('Send Ticket'),
+                            : const Icon(Icons.send),
+                        label: const Text('Send Ticket'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          foregroundColor: Colors.white,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 18),
-            const Center(
-              child: Text(
-                'Email: support@premiumrays.mw',
-                style: TextStyle(color: Colors.grey),
+
+            const SizedBox(height: 24),
+
+            // ─── Contact Details ─────────────────
+            _sectionTitle(context, 'REACH US'),
+            const SizedBox(height: 8),
+            Card(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.email, color: AppTheme.primaryColor),
+                      title: const Text('Email'),
+                      subtitle: const Text('support@premiumrays.mw'),
+                    ),
+                    const Divider(),
+                    ListTile(
+                      leading: const Icon(Icons.phone, color: AppTheme.primaryColor),
+                      title: const Text('Phone'),
+                      subtitle: const Text('+265 888 123 456'),
+                    ),
+                    const Divider(),
+                    ListTile(
+                      leading: const Icon(Icons.location_on, color: AppTheme.primaryColor),
+                      title: const Text('Office'),
+                      subtitle: const Text('Blantyre, Malawi'),
+                    ),
+                  ],
+                ),
               ),
             ),
+            const SizedBox(height: 32),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _sectionTitle(BuildContext context, String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text(
+        title,
+        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: Colors.grey[700],
+              letterSpacing: 0.5,
+            ),
       ),
     );
   }

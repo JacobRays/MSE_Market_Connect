@@ -102,7 +102,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   ? const Center(child: Text('No notifications yet'))
                   : ListView.separated(
                       itemCount: _notifications.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final n = _notifications[index];
                         final timeAgo = _timeAgo(n.createdAt);
@@ -120,7 +120,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           child: ListTile(
                             leading: CircleAvatar(
                               backgroundColor:
-                                  AppTheme.primaryColor.withOpacity(0.1),
+                                  AppTheme.primaryColor.withValues(alpha: 0.1),
                               child: const Icon(Icons.campaign,
                                   color: AppTheme.primaryColor, size: 22),
                             ),
@@ -272,17 +272,20 @@ class _AdminBottomSheetState extends State<_AdminBottomSheet> {
                             future: _pendingKyc,
                             builder: (ctx, snap) {
                               if (snap.connectionState ==
-                                  ConnectionState.waiting)
+                                  ConnectionState.waiting) {
                                 return const Center(
                                     child: CircularProgressIndicator());
-                              if (snap.hasError)
+                              }
+                              if (snap.hasError) {
                                 return Center(
                                     child: Text('Error: ${snap.error}'));
+                              }
                               final list = snap.data ?? [];
-                              if (list.isEmpty)
+                              if (list.isEmpty) {
                                 return const Center(
                                   child: Text('No pending verifications'),
                                 );
+                              }
                               return ListView.builder(
                                 controller: scrollController,
                                 itemCount: list.length,

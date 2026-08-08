@@ -215,7 +215,7 @@ class _TotalValueCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0D47A1).withOpacity(0.3),
+            color: const Color(0xFF0D47A1).withValues(alpha: 0.3),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -252,7 +252,7 @@ class _TotalValueCard extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                hide ? 'P/L ••••' : '$sign${gain.toStringAsFixed(2)} (${sign}${gainPercent.toStringAsFixed(2)}%)',
+                hide ? 'P/L ••••' : '$sign${gain.toStringAsFixed(2)} ($sign${gainPercent.toStringAsFixed(2)}%)',
                 style: TextStyle(
                   color: gainColor,
                   fontWeight: FontWeight.w700,
@@ -321,7 +321,7 @@ class _HoldingCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '${sign}${holding.changePercent.toStringAsFixed(2)}%',
+                  '$sign${holding.changePercent.toStringAsFixed(2)}%',
                   style: TextStyle(color: trendColor, fontWeight: FontWeight.w700, fontSize: 15),
                 ),
                 const SizedBox(height: 10),
@@ -359,8 +359,8 @@ class _OrderCard extends StatelessWidget {
         ),
         leading: CircleAvatar(
           backgroundColor: order.side == 'buy'
-              ? AppTheme.gainColor.withOpacity(0.1)
-              : AppTheme.lossColor.withOpacity(0.1),
+              ? AppTheme.gainColor.withValues(alpha: 0.1)
+              : AppTheme.lossColor.withValues(alpha: 0.1),
           child: Icon(
             order.side == 'buy' ? Icons.call_made : Icons.call_received,
             color: order.side == 'buy' ? AppTheme.gainColor : AppTheme.lossColor,
